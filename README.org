@@ -1,4 +1,4 @@
-#+TITLE: Données Meteonet et dataloader associé
+#+TITLE: Meteonet dataset and associated dataloader
 
 * Goal:
   Write the most efficient dataloader for meteonet, both for
@@ -28,6 +28,7 @@
 
 * Roadmap
   1. le dossier data
+  - transform initdatasets.py as a function in utilities module
   - finalize these scripts, the ultimate test is to sucessfully train the U-net
   - transfer data/ on my webpage as a tarball gzipped file
     

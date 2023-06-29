@@ -24,7 +24,8 @@ def get_wind(rainmap):
 def load_map(npz):
     return list(np.load(npz).values())[0]
 
-def load_dict(npz):
+def load_params(npz):
+    """ load param file created by function .... """
     obj = np.load(npz,allow_pickle=True)
     return obj['arr_0'].reshape(-1)[0]
 
@@ -38,3 +39,22 @@ def map_to_classes( map, thresholds):
         result =  np.concatenate((result, np.expand_dims(map >= th, axis=0)), axis=0)
     return result
 
+def next_date(filename):
+    """ determine the next file according to its name """
+    year,month,day,hour,minute = [int(k[1:]) for k in filename.split(".")[0].split("-")]
+    Months=[0,31,28,31,30,31,30,31,31,30,31,30,31]
+    if year == 2016: Months[2] = 29 # bissextile year
+    if minute == 55:
+        minute=0
+        if hour == 23:
+            hour=0
+            if day==Months[month]:
+                day=1
+                if month==12:
+                    month=1
+                    year+=1
+                else: month += 1
+            else: day += 1
+        else: hour += 1
+    else: minute += 5
+    return 'y'+str(year)+'-M'+str(month)+'-d'+str(day)+'-h'+str(hour)+'-m'+str(minute)+'.npz'
