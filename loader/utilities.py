@@ -2,6 +2,7 @@
 
 from os.path import basename, isfile, join
 import numpy as np
+from tqdm import tqdm
 
 def by_year(filename, year):
     return filename.find(f'y{year}-') != -1
@@ -28,6 +29,9 @@ def load_params(npz):
     """ load param file created by function .... """
     obj = np.load(npz,allow_pickle=True)
     return obj['arr_0'].reshape(-1)[0]
+
+def save_params(params, file):
+    np.savez_compressed( file, params)
 
 def map_to_classes( map, thresholds):
     # image -> 3 images seuillées (le code de Vincent est vraiment étrange)
@@ -58,3 +62,23 @@ def next_date(filename):
         else: hour += 1
     else: minute += 5
     return 'y'+str(year)+'-M'+str(month)+'-d'+str(day)+'-h'+str(hour)+'-m'+str(minute)+'.npz'
+
+def create_params(rainmap_train, rainmap_val, thresholds):
+    """ V1: only rainmaps """
+    tq = tqdm( rainmap_train, unit=" file")
+    l = len(thresholds)
+    data = np.empty( (len(tq),l-1))
+    imin, imax = 1000, 0
+    for i,file in enumerate(tq):
+        map = load_map(file)
+        amin = map.min()
+        if amin != -1:
+            amax = map.max()
+            if amin < imin: imin = amin
+            if amax > imax: imax = amax
+            classes = map_to_classes( map, thresholds).reshape((l,-1))
+            data[i] = 1*(np.sum(classes[1:],axis=1)>0)
+        else:
+            data[i] = -1*np.ones((1,l-1))
+    return { 'min': imin, 'max':imax, 'train': rainmap_train, 'val': rainmap_val,
+             'thresholds': thresholds, 'data': data}
