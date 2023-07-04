@@ -33,15 +33,11 @@ def load_params(npz):
 def save_params(params, file):
     np.savez_compressed( file, params)
 
-def map_to_classes( map, thresholds):
+def map_to_classes( rainmap, thresholds):
     # image -> 3 images seuillées (le code de Vincent est vraiment étrange)
+    # array * list -> array
     threshs = thresholds[1:] # class 0 is not a class
-    nb_class = len(threshs) 
-    n,m = map.shape
-    result = np.expand_dims( map, axis=0)
-    for th in threshs:
-        result =  np.concatenate((result, np.expand_dims(map >= th, axis=0)), axis=0)
-    return result
+    return np.array([rainmap >= th for th in threshs])*1.0
 
 def next_date(filename):
     """ determine the next file according to its name """
@@ -64,7 +60,9 @@ def next_date(filename):
     return 'y'+str(year)+'-M'+str(month)+'-d'+str(day)+'-h'+str(hour)+'-m'+str(minute)+'.npz'
 
 def create_params(rainmap_train, rainmap_val, thresholds):
-    """ V1: only rainmaps """
+    """ determine normalisation paramerts from a train set
+        and various parameters useful for the Meteonet dataloader
+        V1: only rainmaps """
     tq = tqdm( rainmap_train, unit=" file")
     l = len(thresholds)
     data = np.empty( (len(tq),l-1))
