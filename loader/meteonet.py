@@ -2,7 +2,7 @@
 import torch
 from torch.utils.data import Dataset
 from loader.utilities import next_date, load_map, map_to_classes
-from os.path import dirname, basename, join
+from os.path import dirname, basename, join, isfile
 
 class MeteonetDataset(Dataset):
     """ A class to load Meteonet data
@@ -36,17 +36,18 @@ class MeteonetDataset(Dataset):
         return (len(self.files) - self.target_pos)// self.stride
 
     def read(self, file):
-        map = torch.unsqueeze(torch.tensor(load_map(file), dtype=torch.float32), dim=0)
+        # log ??
+        rainmap = torch.unsqueeze(torch.tensor(load_map(file), dtype=torch.float32), dim=0)
         # normalisation (map between 0 and 1)
-        map = (map + 1)/self.params['max']
-        return map
+        rainmap = (rainmap + 1)/self.params['max']
+        return rainmap
     
     def __getitem__(self, i):
         j = i*self.stride
 
         curdate = basename(self.files[j])
         maps = self.read(self.files[j])
-
+        
         # check if the next input_len-1 files have correct dates
         k = 1
         while k < self.input_len:
@@ -54,11 +55,12 @@ class MeteonetDataset(Dataset):
             tmpdate = curdate
             curdate = basename(self.files[j+k])
             if nextdate != curdate:
-                # print( f'SKIP (as input): {i}/{len(self)}  {tmpdate} is missing')
+                print( f'warning: {i}/{len(self)}  {tmpdate} is missing')
                 self.missing_dates.append( (i,tmpdate) )
                 return None
-            maps = torch.cat((maps,self.read(self.files[j+k])), dim=0)
-            k += 1
+                # we use a map with no signal
+                #_,n,m = maps.shape
+                #maps = torch.cat((maps,torch.zeros(1,n,m,dtype=torch.float32)), dim=0)
             
         # go to the target date
         while k < self.target_pos:
@@ -70,18 +72,24 @@ class MeteonetDataset(Dataset):
             # print( f'SKIP (as target): {i}/{len(self)} {curdate} is missing')
             self.missing_dates.append( (i, curdate) )
             return None
-        target = torch.from_numpy(load_map(target_file))
+
+        target = load_map(target_file)
         # print(f'DEBUG: input: {i}/{len(self)} {self.files[j]}+{self.input_len} target: {target_file}')
 
-        return {'inputs': maps, 'target': torch.from_numpy(map_to_classes(target, self.thresh)) if self.thresh else torch.from_numpy(target), 'name':target_file}
+        return { 'inputs': maps,
+                 'target': torch.from_numpy(map_to_classes(target, self.thresh)) if self.thresh else torch.from_numpy(target),
+                 'name': target_file}
 
     
-class Test(Dataset):
+class Test(Dataset, load=False):
     """ A class to check the time cost of loading 200000 files """
     def __init__(self, files):
         self.files = files
+        self.load = load
     def __len__(self):
         return len(self.files)
     def __getitem__(self, i):
         file = self.files[i]
-        return torch.unsqueeze(torch.tensor(load_map(file), dtype=torch.float32), dim=0)
+        if self.load:
+            return torch.unsqueeze(torch.tensor(load_map(file), dtype=torch.float32), dim=0)
+        return isfile(file)
