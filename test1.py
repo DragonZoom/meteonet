@@ -33,6 +33,6 @@ for a in tqdm(train, unit=' files'): pass
 print( f"Found {len(train.missing_dates)} Missing files: ", train.missing_dates)
 
 print("Time to iterate the batched dataset ...")
-train = DataLoader( train, 32)
+train = DataLoader( train, 32, num_workers=8, pin_memory = True)
 for a in tqdm(train, unit= ' batches'): pass
 

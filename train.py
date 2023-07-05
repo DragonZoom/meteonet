@@ -2,7 +2,7 @@
 #  An example of meteonet dataloader usage to train a U-Net [Bouget et al, 2021]
 #
 
-import os
+import os, torch
 from loader.utilities import load_params
 from loader.meteonet import MeteonetDataset
 
@@ -16,10 +16,10 @@ thresholds_in_cent_mm = [100*k/12 for k in thresholds_in_mmh] # CRF sur 5 minute
 experiment = "params/experiment1.npz"
 
 if not os.path.isfile(experiment):
-    from loader.utilities import by_year, split_date, save_params, create_params
-
+    from loader.utilities import by_year, split_date, save_params, create_params, get_files
+    
     # define train/val/test sets and normalisation parameters
-    rainmaps_dir = "data/rainmaps"
+    rainmap_files = get_files("data/rainmaps/*.npz")
     
     train_years  = [2016, 2017]   # two years for the train set
     val_years    = [2018]        # one year for the validation set
@@ -39,8 +39,7 @@ if not os.path.isfile(experiment):
 else:
     params = load_params(experiment)
 
-
-device = 'cpu'
+device = torch.device('cuda')
 
 train = MeteonetDataset( params, 'train', input_len, input_len + time_horizon, input_len, thresholds_in_cent_mm)
 val   = MeteonetDataset( params, 'val',  input_len, input_len + time_horizon, input_len, thresholds_in_cent_mm)
@@ -58,8 +57,8 @@ if False:
 # oversampling !
 from torch.utils.data import DataLoader
 
-train_loader = DataLoader(train, batch_size = 32) #ne marche pas sur le mac ???? : , num_workers=8, pin_memory=True) #, sampler=train_sampler,
-val_loader   = DataLoader(val, batch_size = 32)
+train_loader = DataLoader(train, batch_size = 32, num_workers=8, pin_memory=True) #, sampler=train_sampler,
+val_loader   = DataLoader(val, batch_size = 32, num_workers=8, pin_memory=True) #, sampler=train_sampler,
 
 if False:
     print("Test 2...")

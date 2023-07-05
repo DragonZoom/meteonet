@@ -2,6 +2,7 @@ from loader.meteonet import MeteonetDataset
 from loader.utilities import get_files, map_to_classes
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
+from  model.unet import UNet
 
 thresholds_in_mmh = [0, 0.1, 1, 2.5] 
 thresholds_in_cent_mm = [100*k/12 for k in thresholds_in_mmh] #CRF sur 5 minutes en 1/100 de mm
@@ -9,10 +10,17 @@ thresholds_in_cent_mm = [100*k/12 for k in thresholds_in_mmh] #CRF sur 5 minutes
 files = get_files( "data/rainmaps/y2016*.npz")
 
 dataset = MeteonetDataset( { 'train': files, 'max': 1.0 }, 'train', 6, 10, 6)
-
 data = DataLoader( dataset, batch_size = 1, shuffle = True)
-
 batch = next(iter(data))
+
+model = UNet( 6, 3)
+
+x = batch['inputs']
+y = batch['target']
+y_hat = model(x)
+
+print(x.dtype, y.dtype)
+print(y_hat.shape, y.shape)
 
 # map = map[15:20,0:5]
 
