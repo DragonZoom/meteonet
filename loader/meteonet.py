@@ -89,12 +89,12 @@ class MeteonetDataset(Dataset):
         if not isfile(target_file):
             if self.log: print( f"warning (as target): {i}/{len(self)} {curr_date} is missing")
             self.missing_dates.add( curr_date) 
-            target = np.zeros((n,m),dtype=torch.float32)            
+            target = np.zeros((n,m))
         else:            
             target = load_map(target_file)
 
         return { 'inputs': maps,
-                 'target': torch.from_numpy(map_to_classes(target, self.thresh)) if self.thresh else torch.from_numpy(target),
+                 'target': torch.Tensor(map_to_classes(target, self.thresh)) if self.thresh else torch.Tensor(target),
                  'name': target_file }
     
 class MeteonetTime(Dataset):

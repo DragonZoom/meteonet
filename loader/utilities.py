@@ -22,26 +22,22 @@ def have_wind(rainmap):
     return isfile(rainmap.replace('rainmaps',join('windmaps','U')))
 def get_wind(rainmap):
     return rainmap.replace('rainmaps',join('windmaps','U')), rainmap.replace('rainmaps',join('windmaps','V'))
-
 def load_map(npz):
+    # ->Array[int16] 
     return list(np.load(npz).values())[0]
-
 def load_params(npz):
     """ load param file created by function .... """
     obj = np.load(npz,allow_pickle=True)
     return obj['arr_0'].reshape(-1)[0]
-
 def get_files(dir):
     return sorted( glob(dir), key=lambda f:split_date(f))
-
 def save_params(params, file):
     np.savez_compressed( file, params)
 
 def map_to_classes( rainmap, thresholds):
-    # image -> 3 images seuillées (le code de Vincent est vraiment étrange)
-    # array * list -> array
+    # Array * List[float] -> Array[bool]
     threshs = thresholds[1:] # class 0 is not a class
-    return np.array([rainmap >= th for th in threshs])*1.0
+    return np.array([rainmap >= th for th in threshs])
 
 def next_date(filename, ext='npz'):
     """ determine the next file according to its name """
