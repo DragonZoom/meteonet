@@ -3,6 +3,7 @@
 from os.path import basename, isfile, join
 import numpy as np
 from tqdm import tqdm
+from glob import glob
 
 def by_year(filename, year):
     return filename.find(f'y{year}-') != -1
@@ -30,6 +31,9 @@ def load_params(npz):
     obj = np.load(npz,allow_pickle=True)
     return obj['arr_0'].reshape(-1)[0]
 
+def get_files(dir):
+    return sorted( glob(dir), key=lambda f:split_date(f))
+
 def save_params(params, file):
     np.savez_compressed( file, params)
 
@@ -39,9 +43,9 @@ def map_to_classes( rainmap, thresholds):
     threshs = thresholds[1:] # class 0 is not a class
     return np.array([rainmap >= th for th in threshs])*1.0
 
-def next_date(filename):
+def next_date(filename, ext='npz'):
     """ determine the next file according to its name """
-    year,month,day,hour,minute = [int(k[1:]) for k in filename.split(".")[0].split("-")]
+    year,month,day,hour,minute = [int(k[1:]) for k in filename.split('.')[0].split('-')]
     Months=[0,31,28,31,30,31,30,31,31,30,31,30,31]
     if year == 2016: Months[2] = 29 # bissextile year
     if minute == 55:
@@ -57,7 +61,8 @@ def next_date(filename):
             else: day += 1
         else: hour += 1
     else: minute += 5
-    return 'y'+str(year)+'-M'+str(month)+'-d'+str(day)+'-h'+str(hour)+'-m'+str(minute)+'.npz'
+    return f'y{year}-M{month}-d{day}-h{hour}-m{minute}.{ext}'
+#    return 'y'+str(year)+'-M'+str(month)+'-d'+str(day)+'-h'+str(hour)+'-m'+str(minute)+'.'+ext
 
 def create_params(rainmap_train, rainmap_val, thresholds):
     """ determine normalisation paramerts from a train set
