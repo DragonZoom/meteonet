@@ -16,7 +16,7 @@ class MeteonetDataset(Dataset):
        les dates manquantes sont reportées dans la variables missing_date de la classe.
     
     """
-    def __init__(self, params, tset="train", input_len = 12, target_pos = 18, stride = 12, thresholds = False, log=False):
+    def __init__(self, params, tset="train", input_len = 12, target_pos = 18, stride = 12, thresholds = False, log=False, beta_none_instead_of_null=False):
         """
         params: a dictionnary containing sorted lists of train and set files
                 and normalisation parameters, created by initparams() function
@@ -39,6 +39,8 @@ class MeteonetDataset(Dataset):
         self.missing_dates = set()
         self.log = log
 
+        self.none = beta_none_instead_of_null # if True return dict of None value if a data is missing
+        
         self.dirname = dirname(self.files[0])
         self.extname = basename(self.files[0]).split('.')[1] # pas de . dans les noms de fichiers.
         self.nm = load_map(self.files[0]).shape
@@ -60,6 +62,7 @@ class MeteonetDataset(Dataset):
         maps = self.read(self.files[j])
 
         n,m = self.nm
+        to_ignore = False
         
         # check if the next input_len-1 files have correct dates
         num_obs = self.input_len - 1
@@ -74,6 +77,7 @@ class MeteonetDataset(Dataset):
                 maps = torch.cat((maps,torch.zeros(1,n,m,dtype=torch.float32)), dim=0)
                 if self.log: print( f"warning: {i}/{len(self)}  {curr_date} is missing")
                 self.missing_dates.add( curr_date)
+                to_ignore = self.none
             else:
                 maps = torch.cat((maps,self.read(self.files[j+k])), dim=0)
                 k += 1
@@ -90,8 +94,11 @@ class MeteonetDataset(Dataset):
             if self.log: print( f"warning (as target): {i}/{len(self)} {curr_date} is missing")
             self.missing_dates.add( curr_date) 
             target = np.zeros((n,m))
+            to_ignore = self.none
         else:            
             target = load_map(target_file)
+
+        if to_ignore: return {'inputs':None, 'target':None, 'name':target_file}
 
         return { 'inputs': maps,
                  'target': torch.Tensor(map_to_classes(target, self.thresh)) if self.thresh else torch.Tensor(target),

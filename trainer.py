@@ -1,11 +1,13 @@
 # Training
 # inspired by https://github.com/arxyzan/vanilla-transformer/blob/main/train.py
+# (c) bereziat 2023, version 0.2
+
 import torch, os
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
 class Trainer:
-    def __init__(self, model, loss, optim, get_xy, logdir='runs', device = 'cpu', clip=False):
+    def __init__(self, model, loss, optim, get_xy, logdir="runs/", device = 'cpu', clip=False):
         """ get_xy: from a batch, returns a tuple (X,Y) such as loss(Y, model(X)) applies
         """
         self.model = model
@@ -27,7 +29,9 @@ class Trainer:
             X,Y = self.get_xy(data)
 
             # Loading data
-            if self.device != 'cpu': X = X.to(self.device)
+            if self.device != 'cpu':
+                X = X.to(self.device)
+                Y = Y.to(self.device)
             N += X.shape[0]
 
             # Generating output
@@ -54,12 +58,15 @@ class Trainer:
         self.model.eval()
         N = 0
         validation_loss = 0
-        for X,_,_ in valid:
-            if self.device != 'cpu': X = X.to(self.device)
+        for data in valid:
+            X,Y = self.get_xy(data)
+            if self.device != 'cpu':
+                X = X.to(self.device)
+                Y = Y.to(self.device)
             N += X.shape[0]
             with torch.no_grad():
-                X_hat = self.model(X)
-            validation_loss += self.loss(X,X_hat).item()
+                Y_hat = self.model(X)
+            validation_loss += self.loss(Y,Y_hat).item()
         return validation_loss / N
         
     def fit(self, trainset, valid, epochs):
