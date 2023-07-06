@@ -13,16 +13,9 @@ dataset = MeteonetDataset( { 'train': files, 'max': 1.0 }, 'train', 6, 10, 6)
 data = DataLoader( dataset, batch_size = 1, shuffle = True)
 batch = next(iter(data))
 
+# il faudra prendre un modèle entraîné
 model = UNet( 6, 3)
 
-x = batch['inputs']
-y = batch['target']
-y_hat = model(x)
-
-print(x.dtype, y.dtype)
-print(y_hat.shape, y.shape)
-
-# map = map[15:20,0:5]
 
 # colormap pluie: https://unidata.github.io/python-gallery/examples/Precipitation_Map.html#sphx-glr-download-examples-precipitation-map-py
 
@@ -32,17 +25,35 @@ def view_inference( inputs, target, estimated, thresholds, nlines=2):
     if n % nlines:
         print(f'{nlines=} should divide {inputs.shape[0]=}')
         return
-    
+
+    # obs
     for i in range(n):
-        plt.subplot( nlines, n//nlines, i+1)
+        plt.subplot( nlines+2, n//nlines, i+1)
         plt.axis('off')
         plt.imshow(inputs[i])
+
         
-    # classes = map_to_classes( target, thresholds_in_cent_mm)
+    # target (ground truth)
+    classes = map_to_classes( target, thresholds_in_cent_mm)
+    i = len(inputs) 
+    for c in classes:
+        plt.subplot( nlines+2, n//nlines, i+1)
+        plt.axis('off')
+        plt.imshow(c[0])
+        i += 1
+
+    # estimated 
+    print(estimated.shape)
+    for j in range(estimated.shape[1]):
+        plt.subplot( nlines+2, n//nlines, i+1)
+        plt.axis('off')
+        plt.imshow(estimated[0][j]>0.5)
+        i += 1
     plt.show()
 
 
 view_inference( batch['inputs'][0],
-                batch['target'], None,
+                batch['target'],
+                model(batch['inputs']).detach().numpy(),
                 thresholds_in_cent_mm
                )
