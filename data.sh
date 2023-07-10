@@ -1,6 +1,7 @@
 #!/bin/bash
 
 if ! [ -f data/README.org ]; then
+    # c'est la base réduite. il faut donc trouver un endroit pour stocker les 13 giga de la base complète
     curl https://pequan.lip6.fr/~bereziat/rain-nowcasting/data.tar.gz --output data.tar.gz
     tar xvfz data.tar.gz
     rm data.tar.gz
