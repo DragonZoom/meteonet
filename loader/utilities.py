@@ -63,21 +63,18 @@ def next_date(filename, ext='npz'):
 def create_params(rainmap_train, rainmap_val, thresholds):
     """ determine normalisation paramerts from a train set
         and various parameters useful for the Meteonet dataloader
-        V1: only rainmaps """
-    tq = tqdm( rainmap_train, unit=" file")
+        * difference with Vincent: maps having missing values (-1) are kept because they contain valuable signal
+        * V1: only rainmaps
+    """
+    tq = tqdm( rainmap_train, unit=" files")
     l = len(thresholds)
     data = np.empty( (len(tq),l-1))
     imin, imax = 1000, 0
     for i,file in enumerate(tq):
         map = load_map(file)
-        amin = map.min()
-        if amin != -1:
-            amax = map.max()
-            if amin < imin: imin = amin
-            if amax > imax: imax = amax
-            classes = map_to_classes( map, thresholds).reshape((l,-1))
-            data[i] = 1*(np.sum(classes[1:],axis=1)>0)
-        else:
-            data[i] = -1*np.ones((1,l-1))
-    return { 'min': imin, 'max':imax, 'train': rainmap_train, 'val': rainmap_val,
+        amax = map.max()
+        if amax > imax: imax = amax
+        classes = map_to_classes( map, thresholds).reshape((l-1,-1))
+        data[i] = 1*(np.sum(classes,axis=1)>0)
+    return { 'max':imax, 'train': rainmap_train, 'val': rainmap_val,
              'thresholds': thresholds, 'data': data}
