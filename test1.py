@@ -7,7 +7,7 @@ from os.path import basename
 
 from torch.utils.data import DataLoader
 
-files = sorted(glob( "data/rainmaps/*.npz"), key=lambda f:split_date(f))[:10000]
+files = glob( "data/rainmaps/*.npz")
 
 # from loader.utilities import get_files, next_date, split_date
 # files = sorted(files, key=lambda f:split_date(f))
@@ -19,14 +19,15 @@ files = sorted(glob( "data/rainmaps/*.npz"), key=lambda f:split_date(f))[:10000]
 #    if  nextdate != curdate:
 #        print( f'{tmpdate} missing')
 
-print(f"Time to read {len(files)} files...")
+print(f"Time to read and indexing {len(files)} files...")
 train = MeteonetDataset( files, 12, 18, 12, tqdm=tqdm)
+print(f"found {len(train.params['missing_dates'])} missing dates:")
 
 print("Time to iterate the dataset ...")
-#print( f"Found {len(train.missing_dates)} Missing files: ", train.get_missing_dates(iterate=True))
-sampler = meteonet_sequential_sampler( train, tqdm)
+for d in tqdm(train, unit=' items'): pass
 
 print("Time to iterate the batched dataset ...")
-train = DataLoader( train, 32, sampler=sampler, pin_memory = True)
+sampler = meteonet_sequential_sampler( train)
+train = DataLoader( train, 32, sampler=sampler)
 for a in tqdm(train, unit= ' batches'): pass
 
