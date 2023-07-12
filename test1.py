@@ -1,21 +1,16 @@
-from loader.meteonet import MeteonetDataset, MeteonetTime
-from loader.utilities import get_files, next_date
+from loader.meteonet import MeteonetDataset
+from loader.sampler import items_to_oversample, meteonet_sequential_sampler
+from loader.utilities import split_date
 from tqdm import tqdm
-
+from glob import glob
 from os.path import basename
 
 from torch.utils.data import DataLoader
 
-files = get_files( "data/rainmaps/*.npz")
+files = sorted(glob( "data/rainmaps/*.npz"), key=lambda f:split_date(f))[:10000]
 
-test_files = MeteonetTime(files)
-print( f"Time to check {len(test_files)} files ...")
-test_files.timeit()
-
-test_load = MeteonetTime(files, load=True)
-print( f"Time to load {len(test_load)} files ...")
-test_load.timeit()
-
+# from loader.utilities import get_files, next_date, split_date
+# files = sorted(files, key=lambda f:split_date(f))
 # curdate = basename(files[0])
 # for f in files[1:]:
 #    nextdate = next_date(curdate)
@@ -24,15 +19,14 @@ test_load.timeit()
 #    if  nextdate != curdate:
 #        print( f'{tmpdate} missing')
 
-params = { 'train': files, 'max': 1.0 }
+print(f"Time to read {len(files)} files...")
+train = MeteonetDataset( files, 12, 18, 12, tqdm=tqdm)
 
 print("Time to iterate the dataset ...")
-train = MeteonetDataset( params, 'train', 12, 18, 12)
-for a in tqdm(train, unit=' files'): pass
-
-print( f"Found {len(train.missing_dates)} Missing files: ", train.missing_dates)
+#print( f"Found {len(train.missing_dates)} Missing files: ", train.get_missing_dates(iterate=True))
+sampler = meteonet_sequential_sampler( train, tqdm)
 
 print("Time to iterate the batched dataset ...")
-train = DataLoader( train, 32, num_workers=8, pin_memory = True)
+train = DataLoader( train, 32, sampler=sampler, pin_memory = True)
 for a in tqdm(train, unit= ' batches'): pass
 

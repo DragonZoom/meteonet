@@ -33,11 +33,9 @@ def get_files(dir):
     return sorted( glob(dir), key=lambda f:split_date(f))
 def save_params(params, file):
     np.savez_compressed( file, params)
-
 def map_to_classes( rainmap, thresholds):
     # Array * List[float] -> Array[bool]
-    threshs = thresholds[1:] # class 0 is not a class
-    return np.array([rainmap >= th for th in threshs])
+    return np.array([rainmap >= th for th in thresholds])
 
 def next_date(filename, ext='npz'):
     """ determine the next file according to its name """
@@ -60,21 +58,22 @@ def next_date(filename, ext='npz'):
     return f'y{year}-M{month}-d{day}-h{hour}-m{minute}.{ext}'
 #    return 'y'+str(year)+'-M'+str(month)+'-d'+str(day)+'-h'+str(hour)+'-m'+str(minute)+'.'+ext
 
-def create_params(rainmap_train, rainmap_val, thresholds):
+def create_params(rainmap_train, rainmap_val, thresholds = [1]):
     """ determine normalisation paramerts from a train set
         and various parameters useful for the Meteonet dataloader
         * difference with Vincent: maps having missing values (-1) are kept because they contain valuable signal
         * V1: only rainmaps
+        * there is a default value for thresholds
     """
     tq = tqdm( rainmap_train, unit=" files")
     l = len(thresholds)
-    data = np.empty( (len(tq),l-1))
+    data = np.empty( (len(tq), l))
     imin, imax = 1000, 0
     for i,file in enumerate(tq):
-        map = load_map(file)
-        amax = map.max()
+        mapr = load_map(file)
+        amax = mapr.max()
         if amax > imax: imax = amax
-        classes = map_to_classes( map, thresholds).reshape((l-1,-1))
-        data[i] = 1*(np.sum(classes,axis=1)>0)
+        classes = map_to_classes( mapr, thresholds).reshape((l,-1))
+        data[i] = np.sum(classes,axis=1)>0
     return { 'max':imax, 'train': rainmap_train, 'val': rainmap_val,
-             'thresholds': thresholds, 'data': data}
+             'thresholds': thresholds, 'classes': data}

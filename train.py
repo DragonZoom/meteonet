@@ -10,7 +10,7 @@ os.system('mkdir -p params')
 
 input_len = 12
 time_horizon = 6
-thresholds_in_mmh = [0, 0.1, 1, 2.5] 
+thresholds_in_mmh = [0.1, 1, 2.5]  
 thresholds_in_cent_mm = [100*k/12 for k in thresholds_in_mmh] # CRF sur 5 minutes en 1/100 de mm comme les données MétéoNet.
 
 experiment = "params/experiment1.npz"

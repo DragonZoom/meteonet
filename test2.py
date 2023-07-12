@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from  model.unet import UNet
 
-thresholds_in_mmh = [0, 0.1, 1, 2.5] 
+thresholds_in_mmh = [0.1, 1, 2.5] 
 thresholds_in_cent_mm = [100*k/12 for k in thresholds_in_mmh] #CRF sur 5 minutes en 1/100 de mm
 
 files = get_files( "data/rainmaps/y2016*.npz")
