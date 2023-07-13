@@ -1,12 +1,12 @@
 #!/bin/bash
 
-if ! [ -f data/README.org ]; then
-    # c'est la base réduite. il faut donc trouver un endroit pour stocker les 13 giga de la base complète
+if ! [ -f data/rainmaps/y2018-M2-d5-h18-m55.npz ]; then
+    # c'est la base réduite. il faut donc trouver un endroit pour stocker les 11 giga de la base complète
     curl https://pequan.lip6.fr/~bereziat/rain-nowcasting/data.tar.gz --output data.tar.gz
     tar xvfz data.tar.gz
     rm data.tar.gz
 
-    echo "Future repo a faire (il est sur mon mac dans ~/METEONET/data)" > data/README.org
+    
     mv data/Rain data/rainmaps
     mv data/rainmaps/train/*.npz data/rainmaps
     mv data/rainmaps/val/*.npz data/rainmaps
@@ -21,6 +21,6 @@ if ! [ -f data/README.org ]; then
     mv data/windmaps/V/val/*.npz data/windmaps/V
     rm -rf data/windmaps/V/{train,val}
 else
-    echo "Data already downloaded: good!"
+    echo "Meteonet dataset (reduced) already downloaded: good!"
 fi
 
