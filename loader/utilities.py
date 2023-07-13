@@ -4,6 +4,7 @@ from os.path import basename, isfile, join
 import numpy as np
 from tqdm import tqdm
 from glob import glob
+import torch
 
 def by_year(filename, year):
     return filename.find(f'y{year}-') != -1
@@ -35,7 +36,9 @@ def save_params(params, file):
     np.savez_compressed( file, params)
 def map_to_classes( rainmap, thresholds):
     # Array * List[float] -> Array[bool]
-    return np.array([rainmap >= th for th in thresholds])
+    # return np.array([rainmap >= th for th in thresholds])
+    # version torch tensor
+    return torch.cat([1.*(rainmap >= th).unsqueeze(1) for th in thresholds], dim=1)
 
 def next_date(filename, ext='npz'):
     """ determine the next file according to its name """
