@@ -110,11 +110,11 @@ class MeteonetDataset(Dataset):
 
     def read(self, idx):
         if self.do_not_read_map:
-            return torch.zeros((1,1))            
+            return torch.zeros((1,1)), torch.zeros((1,1))
         file = self.params['files'][idx]
         ## Anastase: tensor() ou Tensor() ?
-        rainmap = torch.Tensor(load_map(file)).unsqueeze(0)
-        return torch.log(rainmap + 1 + epsilon)/self.norm_factor
+        rainmap = torch.Tensor(load_map(file))
+        return torch.log(rainmap.unsqueeze(0) + 1 + epsilon)/self.norm_factor, rainmap
 
     def __getitem__(self, i):
         item = self.params['items'][i]
@@ -124,16 +124,18 @@ class MeteonetDataset(Dataset):
         if item.min() == -1:
             return None
 
-        maps = self.read(item[0])
+        maps, _ = self.read(item[0])
         for idx in item[1:self.params['input_len']]:
-            maps = torch.cat((maps, self.read(idx)),dim=0)
+            rmap, persistence = self.read(idx)
+            maps = torch.cat((maps, rmap), dim=0)
 
         target_file = self.params['files'][item[-1]]
         
         return {
             'inputs': maps,
             'target': torch.Tensor(load_map(target_file)) if not self.do_not_read_map else torch.zeros(1),
-            'target_name': target_file
+            'target_name': target_file,
+            'persistence': persistence
         }
 
 class MeteonetTime(Dataset):
