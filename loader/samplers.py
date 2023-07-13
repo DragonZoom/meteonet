@@ -1,6 +1,8 @@
 # Over sampling for unbalanced classes
 
+import torch
 from torch.utils.data import WeightedRandomSampler
+
 
 def items_to_oversample( meteonet_ds, threshold):
     """ Get the items from dataset should be oversampled (1) / undersampled (0)
@@ -19,9 +21,10 @@ def items_to_oversample( meteonet_ds, threshold):
     meteonet_ds.do_not_read_map = False
     return torch.tensor(w)
 
-def meteonet_random_oversampler( w , p=.8):
+def meteonet_random_oversampler( meteonet_ds, threshold , p=.8):
     """ Oversample of factor resp. p, 1-p, and 0 items flagged resp. 1, 0, -1 (see items_to_oversample())
-    """    
+    """
+    w = items_to_oversample( meteonet_ds, threshold)
     NR = (w==1).sum().item()
     NN = (w==0).sum().item()
     pR = p/NR   
