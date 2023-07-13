@@ -1,99 +1,139 @@
 #
 #  An example of meteonet dataloader usage to train a U-Net [Bouget et al, 2021]
 #
-
-import os, torch
-from loader.utilities import load_params
+from glob import glob
+from tqdm import tqdm
 from loader.meteonet import MeteonetDataset
+from loader.samplers import meteonet_random_oversampler, meteonet_sequential_sampler
+from torch.utils.data import DataLoader
+import os, torch
 
-os.system('mkdir -p params')
-
-input_len = 12
+## user parameters
+input_len    = 12
 time_horizon = 6
-thresholds_in_mmh = [0.1, 1, 2.5]  
-thresholds_in_cent_mm = [100*k/12 for k in thresholds_in_mmh] # CRF sur 5 minutes en 1/100 de mm comme les données MétéoNet.
+stride       = input_len
+thresholds   = [0.1, 1, 2.5]  # series of thresholds (unit: mm/h)
+thresholds   = [100*k/12 for k in thresholds] #  unit: CRF over 5 minutes in 1/100 of mm (as meteonet data)
+oversampling = 0.8 # oversampling of the last class
 
-experiment = "params/experiment1.npz"
+train_files = glob('data/rainmaps/y201[67]-*')
+val_files   = glob('data/rainmaps/y2018-*')
 
-if not os.path.isfile(experiment):
-    from loader.utilities import by_year, split_date, save_params, create_params, get_files
-    
-    # define train/val/test sets and normalisation parameters
-    rainmap_files = get_files("data/rainmaps/*.npz")
-    
-    train_years  = [2016, 2017]   # two years for the train set
-    val_years    = [2018]        # one year for the validation set
-
-    train_files = []
-    for y in train_years:
-        train_files += sorted(filter(lambda f: by_year(f,y), rainmap_files), key=lambda f: split_date(f))
-        
-    val_files = []
-    for y in val_years:
-        val_files += sorted(filter(lambda f: by_year(f,y), rainmap_files), key=lambda f: split_date(f))
-
-    print('compute normalisation parameters...')
-    params = create_params( train_files, val_files, thresholds_in_cent_mm)
-    print(f'writing {experiment} ...')
-    save_params(params, experiment)
-else:
-    params = load_params(experiment)
+# datasets
+train_ds = MeteonetDataset( train_files, input_len, input_len + time_horizon, stride, cached='data/train.npz', tqdm=tqdm)
+val_ds   = MeteonetDataset( val_files, input_len, input_len + time_horizon, stride, cached='data/val.npz', tqdm=tqdm)
 
 device = torch.device('cuda')
 
-train = MeteonetDataset( params, 'train', input_len, input_len + time_horizon, input_len, thresholds_in_cent_mm)
-val   = MeteonetDataset( params, 'val',  input_len, input_len + time_horizon, input_len, thresholds_in_cent_mm)
+# samplers for dataloaders
+train_sampler = meteonet_random_oversampler( train_ds, thresholds[-1], oversampling)
+val_sampler = meteonet_sequential_sampler( val_ds)
 
-if False:
-    """ this test successfully passes"""
-    print("Test 1...")
-    from tqdm import tqdm
-    pbar = tqdm(train, unit=" files")
-    for t in pbar:
-        pass
-    print("pass train set")
+# dataloaders
+train_loader = DataLoader(train_ds, batch_size = 32, sampler=train_sampler, num_workers=8, pin_memory=True)
+val_loader   = DataLoader(val_ds, batch_size = 32, sampler=val_sampler, num_workers=8, pin_memory=True) 
 
-
-# oversampling !
-from torch.utils.data import DataLoader
-
-train_loader = DataLoader(train, batch_size = 32, num_workers=8, pin_memory=True) #, sampler=train_sampler,
-val_loader   = DataLoader(val, batch_size = 32, num_workers=8, pin_memory=True) #, sampler=train_sampler,
-
-if False:
-    print("Test 2...")
-    from tqdm import tqdm
-    print(len(train),len(train_loader))
-    pbar = tqdm(train_loader, unit=" 32-file")
-    for t in pbar:
-        pass
-    print('pass train dataloader')
 
 ## Model & training procedure
 from trainer import Trainer
 import torch.nn as nn
 from torch.optim import Adam
 from model.unet import UNet
+from loader.utilities import map_to_classes
 
-logit = nn.BCEWithLogitsLoss()
-logit.to(device)
-unet = UNet(n_channels = input_len, n_classes = len(thresholds_in_mmh)-1, bilinear = True)
-#net.to(device)
-adam = Adam(unet.parameters(), lr=0.01, weight_decay=1e-8)
+loss = nn.BCEWithLogitsLoss()
+loss.to(device)
+
+model = UNet(n_channels = input_len, n_classes = len(thresholds), bilinear = True)
+model.to(device)
+
+optimizer = Adam(model.parameters(), lr=0.01, weight_decay=1e-8)
 
 epochs = 100
 
 os.system("mkdir -p runs")
 
 def get_xy( data):
-    return data['inputs'], data['target']
+    return data['inputs'], map_to_classes(data['target'], thresholds)
 
-trainer = Trainer( unet, logit, adam, get_xy, 'runs', device, 0.1)
-train_loss, valid_loss = trainer.fit( train_loader, val_loader, epochs)
+
+train_losses = []
+val_losses = []
+
+def calculate_TPFPFN( pred, true):
+    """ BCNM*BCNM
+    """
+    diff = 2*pred - true
+    return torch.cat((torch.sum(diff==1,dim=(0,2,3)), # TP
+                      torch.sum(diff==2,dim=(0,2,3)), # FP
+                      torch.sum(diff==-1,dim=(0,2,3)  # FN
+                    ))).reshape(3,-1)
+
+def calculate_scores( TPFPFN):
+    TP, FP, FN = TPFPFN
+    precis = TP/(TP+FP)
+    recall = TP/(TP+FN)
+    f1 = 2*precis*recall/(precis+recall) # if precis>0 or recall>0 else np.nan
+    return precis,recall,f1
+
+for epoch in range(40):
+    # one epoch    
+    train_loss = 0
+    for batch in tqdm(train_loader):
+        x,y = get_xy(batch)
+        x,y = x.to(device), y.to(device)
+
+        y_hat = model(x)
+
+        l = loss(y_hat, y)
+        train_loss += l.item()
+
+        optimizer.zero_grad()
+        l.backward()
+        nn.utils.clip_grad_value_(model.parameters(), 0.1)
+        optimizer.step()
+    train_loss /= len(train_loader)
+    train_losses.append(train_loss)
+    print(f'epoch {epoch+1} {train_loss=}')
+
+    if epoch % 5 == 4: # validation toutes les 5 epochs
+        val_loss = 0
+        TPFPFN_pred = 0
+        TPFPFN_pers = 0        
+        for batch in tqdm(val_loader):
+            x,y = get_xy(batch)
+            x,y = x.to(device), y.to(device)
+            with torch.no_grad():
+                y_hat = model(x)
+            
+            l = loss(y_hat, y)
+            val_loss += l.item()
+            TPFPFN_pred += calculate_TPFPFN(torch.sigmoid(y_hat)>.5, y)
+            TPFPFN_pers += calculate_TPFPFN(map_to_classes(batch['persistence'], thresholds).to(device), y)
+            
+        precis_pred, recall_pred, f1_pred =  calculate_scores( TPFPFN_pred)
+        precis_pers, recall_pers, f1_pers =  calculate_scores( TPFPFN_pers)
+
+            
+        val_loss /= len(val_loader)
+        val_losses.append(val_loss)
+        print(f'epoch {epoch+1} {val_loss=}')
+
+torch.save(model.state_dict, "model.pt")
+
+import matplotlib.pyplot as plt
+plt.subplot(1,2,1)
+plt.plot(train_losses)
+plt.subplot(1,2,2)
+plt.plot(val_losses)
+plt.show()
+
+#trainer = Trainer( model, loss, solver, get_xy, 'runs', device, 0.1)
+#train_loss, valid_loss = trainer.fit( train_loader, val_loader, epochs)
+
+
 
 exit(0)
-
-
 import torch
 from torch.optim import Adam
 import torch.nn as nn
