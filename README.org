@@ -1,6 +1,6 @@
 #+TITLE: Meteonet dataset and associated dataloader
 
-* Goal:
+* Objectives
   Write the most efficient dataloader for meteonet, both for
   classification, and regression.
   Then, adapt it to Vincent's code, then all my students codes.
@@ -10,27 +10,25 @@
 
 * Structure of this repository (currently under developpement )
 
-:  data.sh              script that's downloading meteonet dataset
-:  data/                meteonet data, to be loaded using data.sh script
-:  loader/              torch dataloader functions
-:     utilities.py      utilities functions to filter and sorted meteonet files
-:     loader.py         contains MeteoetDataset class
-:     sampler.py        oversampling routine
+:  download-meteonet.sh   # script that's downloading meteonet dataset (11 Gb)
+:  meteonet/              # meteonet dataset, downloaded by previous script
+:  download-meteonet-reduced.sh  # download a small meteonet dataset (1.8 Gb)
+:  data/                  # small meteonet dataset, downloaded by previous script
+:  loader/                # torch dataloader functions
+:     utilities.py        # utilities functions to filter and sorted meteonet files
+:     loader.py           # contains MeteoetDataset class
+:     samplers.py         # oversampling routines
+: model/                  # U-net to test training
+: train.py                # traning routine for unet
 
-* Usage (to do)
-  1. Data preparation.
-     Edit parameters (periods for train and validation sets, rain
-     thresholds) from initdatasets.py and run the script.
-     It will write a data/config.npz file which will read by the others
-     scripts.
-     
-  2. 
+* Setup
+ 
+  - requirements: pytorch, matplotlib, numpy, tqdm
+  - Usage:
+    1. download one of the two database
+    2. run train.py
+       
 
-* Roadmap
-  1. le dossier data
-  - transform initdatasets.py as a function in utilities module
-  - finalize these scripts, the ultimate test is to sucessfully train the U-net
-  - transfer data/ on my webpage as a tarball gzipped file
     
     
 
