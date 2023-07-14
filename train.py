@@ -167,6 +167,7 @@ for epoch in range(epochs):
 
 rundir = f'runs/{datetime.now()}'
 os.system(f'mkdir -p "{rundir}"')
+os.system(f'ln -sf "{rundir}" lastrun')
 
 scores = {'train_losses': train_losses, 'val_losses': val_losses,
           'val_f1_pred': val_f1_pred, 'f1_pers': f1_pers }
