@@ -21,11 +21,11 @@ class Trainer:
         self.traindir = os.path.join(logdir,"train")
         self.writer = SummaryWriter(log_dir=self.traindir)
         
-    def train( self, trainset):
+    def train( self, train):
         self.model.train()
         training_loss = 0
         N = 0
-        for data in trainset:
+        for data in train:
             X,Y = self.get_xy(data)
 
             # Loading data
@@ -38,7 +38,7 @@ class Trainer:
             Y_hat = self.model(X)
           
             # Calculating loss
-            loss = self.loss(Y, Y_hat)
+            loss = self.loss(Y_hat, Y)
           
             if self.clip: torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip)
 
@@ -66,16 +66,16 @@ class Trainer:
             N += X.shape[0]
             with torch.no_grad():
                 Y_hat = self.model(X)
-            validation_loss += self.loss(Y,Y_hat).item()
+            validation_loss += self.loss(Y_hat,Y).item()
         return validation_loss / N
         
-    def fit(self, trainset, valid, epochs):
+    def fit(self, train, valid, epochs):
         train_loss = []
         valid_loss = []
 
         pbar = tqdm(range(epochs), unit='epoch')
         for epoch in pbar:
-            train_loss.append(self.train(trainset))
+            train_loss.append(self.train(train))
             valid_loss.append(self.evaluate(valid))
 
             if epoch%5 == 0:
@@ -88,5 +88,6 @@ class Trainer:
         # save last epoch
         torch.save(self.model,os.path.join(self.traindir,f'model_epoch{epochs-1}.tch'))
         # save losses
-        torch.save({'train':train_loss,'valid':valid_loss}, os.path.join(self.traindir,'losses.tch'))
+        torch.save({'train':train_loss,'valid':valid_loss},
+                   os.path.join(self.traindir,'losses.tch'))
         return train_loss, valid_loss
