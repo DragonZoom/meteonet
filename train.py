@@ -1,6 +1,7 @@
 #
-#  An example of meteonet dataloader usage to train a U-Net [Bouget et al, 2021]
-#
+#  An example of meteonet dataloader usage to train a U-Net 
+#  [1] Bouget et al, 2021, https://www.mdpi.com/2072-4292/13/2/246#B24-remotesensing-13-00246
+
 from glob import glob
 from tqdm import tqdm
 from loader.meteonet import MeteonetDataset
@@ -8,6 +9,7 @@ from loader.samplers import meteonet_random_oversampler, meteonet_sequential_sam
 from torch.utils.data import DataLoader
 import os, torch
 from datetime import datetime
+from loader.utilities import split_date
 
 ## user parameters
 input_len    = 12
@@ -15,14 +17,14 @@ time_horizon = 6
 stride       = input_len
 thresholds   = [0.1, 1, 2.5]  # series of thresholds (unit: mm/h)
 thresholds   = [100*k/12 for k in thresholds] #  unit: CRF over 5 minutes in 1/100 of mm (as meteonet data)
-oversampling = 0.8 # oversampling of the last class
+oversampling = 0.9 # oversampling of the last class
 
 modelsize    = 8 # to do
 
-epochs       = 100
-batch_size   = 32
-lr           = 0.01
-wd           = 1e-8
+epochs       = 20
+batch_size   = 256
+lr           = {0:8e-4, 4:1e-4}
+wd           = {0:1e-5 ,4:5e-5} # 1e-8
 clip_grad    = 0.1
 
 val_step     = 1
@@ -57,11 +59,23 @@ Others params:
 """)
 
 train_files = glob(f'{datadir}/rainmaps/y201[67]-*')
-val_files   = glob(f'{datadir}/rainmaps/y2018-*')
+val_test_files = glob(f'{datadir}/rainmaps/y2018-*')
+
+# split in validation/test sets according to Section 4.1 from [1]
+val_files = []
+test_files = []
+for f in sorted(val_test_files, key=lambda f:split_date(f)):
+    year, month, day, hour, _ = split_date(f)
+    yday = datetime(year, month, day).timetuple().tm_yday - 1
+    if (yday // 7) % 2 == 0: # odd week
+        val_files.append(f)
+    else:
+        if not (yday % 7 == 0 and hour == 0): # ignore the first hour of the first day of even weeks
+            test_files.append(f)
 
 # datasets
-train_ds = MeteonetDataset( train_files, input_len, input_len + time_horizon, stride, cached='data/train.npz', tqdm=tqdm)
-val_ds   = MeteonetDataset( val_files, input_len, input_len + time_horizon, stride, cached='data/val.npz', tqdm=tqdm)
+train_ds = MeteonetDataset( train_files, input_len, input_len + time_horizon, stride, cached=f'{datadir}/train.npz', tqdm=tqdm)
+val_ds   = MeteonetDataset( val_files, input_len, input_len + time_horizon, stride, cached=f'{datadir}/val.npz', tqdm=tqdm)
 
 device = torch.device('cuda')
 
@@ -78,7 +92,7 @@ val_loader   = DataLoader(val_ds, batch_size, sampler=val_sampler, num_workers=8
 from trainer import Trainer
 import torch.nn as nn
 from torch.optim import Adam
-from model.unet import UNet
+from models.unet import UNet
 from loader.utilities import map_to_classes
 
 loss = nn.BCEWithLogitsLoss()
@@ -86,8 +100,6 @@ loss.to(device)
 
 model = UNet(n_channels = input_len, n_classes = len(thresholds), bilinear = True)
 model.to(device)
-
-optimizer = Adam(model.parameters(), lr=lr, weight_decay=wd)
 
 def get_xy( data):
     return data['inputs'], map_to_classes(data['target'], thresholds)
@@ -111,6 +123,14 @@ def calculate_scores( TPFPFN):
     f1 = 2*precis*recall/(precis+recall) # if precis>0 or recall>0 else np.nan
     return precis,recall,f1
 
+
+print(f"""
+size of train files/items/batch
+     {len(train_files)} {len(train_ds)} {len(train_loader)}
+size of  files/items/batch
+     {len(val_files)} {len(val_ds)} {len(val_loader)}
+""")
+
 # eval persistence
 TPFPFN_pers = 0
 print('eval persistence...')
@@ -123,7 +143,10 @@ f1_pers = list(f1_pers.numpy())
 
 print('start training...')
 for epoch in range(epochs):
-    # one epoch    
+    if epoch in lr:
+        optimizer = Adam(model.parameters(), lr=lr[epoch], weight_decay=wd[epoch])
+        
+    model.train()  
     train_loss = 0
     for batch in tqdm(train_loader):
         x,y = get_xy(batch)
@@ -141,7 +164,8 @@ for epoch in range(epochs):
     train_loss /= len(train_loader)
     train_losses.append(train_loss)
     print(f'epoch {epoch+1} {train_loss=}')
-    
+
+    model.eval()
     if epoch%val_step == val_step-1: # validation toutes les val_step epochs
         val_loss = 0
         TPFPFN_pred = 0
@@ -173,11 +197,11 @@ scores = {'train_losses': train_losses, 'val_losses': val_losses,
           'val_f1_pred': val_f1_pred, 'f1_pers': f1_pers }
 
 print( f'Optimisation over, scores and weights are saved in {rundir}')
-torch.save(model.state_dict, rundir+"/model.pt")
+torch.save(model.state_dict(), rundir+"/model.pt")
 torch.save(scores, rundir+"/scores.pt")
 
 
-if False:
+if True:
     import matplotlib.pyplot as plt
     plt.subplot(1,2,1)
     plt.plot(train_losses)
