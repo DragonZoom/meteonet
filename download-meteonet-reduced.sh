@@ -1,11 +1,9 @@
 #!/bin/bash
 
 if ! [ -f data/rainmaps/y2018-M2-d5-h18-m55.npz ]; then
-    # c'est la base réduite. il faut donc trouver un endroit pour stocker les 11 giga de la base complète
     curl https://pequan.lip6.fr/~bereziat/rain-nowcasting/data.tar.gz --output data.tar.gz
     tar xvfz data.tar.gz
     rm data.tar.gz
-
     
     mv data/Rain data/rainmaps
     mv data/rainmaps/train/*.npz data/rainmaps
