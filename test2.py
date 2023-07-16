@@ -1,59 +1,67 @@
-from loader.meteonet import MeteonetDataset
-from loader.utilities import get_files, map_to_classes
+# plot meteonet rainmaps (todo: scores and inference)
+
+import numpy as np
 import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader
-from  model.unet import UNet
-
-thresholds_in_mmh = [0.1, 1, 2.5] 
-thresholds_in_cent_mm = [100*k/12 for k in thresholds_in_mmh] #CRF sur 5 minutes en 1/100 de mm
-
-files = get_files( "data/rainmaps/y2016*.npz")
-
-dataset = MeteonetDataset( { 'train': files, 'max': 1.0 }, 'train', 6, 10, 6)
-data = DataLoader( dataset, batch_size = 1, shuffle = True)
-batch = next(iter(data))
-
-# il faudra prendre un modèle entraîné
-model = UNet( 6, 3)
+from matplotlib import colors
+from loader.utilities import load_map, next_date, split_date
 
 
-# colormap pluie: https://unidata.github.io/python-gallery/examples/Precipitation_Map.html#sphx-glr-download-examples-precipitation-map-py
+def get_data( ddir, date, num):
+    y,M,d,h,m = date
+    f = f'y{y}-M{M}-d{d}-h{h}-m{m}.npz'
+    maps = []
+    dates  = [] 
+    while num > 0:
+        maps.append(load_map(ddir+f))
+        dates.append( f'{y}/{M}/{d} {h}:{m}')        
+        f = next_date(f)
+        y,M,d,h,m = split_date(f)
+        num += -1
+    return np.array(maps), dates
 
+def plot_meteonet_rainmaps( data, dates, lon, lat, zone, title):
+    # source: https://github.com/meteofrance/meteonet/blob/master/notebooks/radar/open_rainfall.ipynb
+    fig, ax = plt.subplots(2, 2,figsize=(9,9))
+    fig.suptitle(title, fontsize=16)
 
-def view_inference( inputs, target, estimated, thresholds, nlines=2):
-    n = inputs.shape[0]
-    if n % nlines:
-        print(f'{nlines=} should divide {inputs.shape[0]=}')
-        return
+    # Choose the colormap
+    cmap = colors.ListedColormap(['silver','white', 'darkslateblue', 'mediumblue','dodgerblue', 
+                                  'skyblue','olive','mediumseagreen','cyan','lime','yellow',
+                                  'khaki','burlywood','orange','brown','pink','red','plum'])
+    bounds = [-1,0,2,4,6,8,10,15,20,25,30,35,40,45,50,55,60,65,75]
+    norm = colors.BoundaryNorm(bounds, cmap.N)
 
-    # obs
-    for i in range(n):
-        plt.subplot( nlines+2, n//nlines, i+1)
-        plt.axis('off')
-        plt.imshow(inputs[i])
+    pl=ax[0,0].pcolormesh(lon, lat, data[0,:,:],cmap=cmap, norm=norm)
+    ax[0,0].set_ylabel('latitude (degrees_north)')
+    ax[0,0].set_title(str(dates[0]) + " - "+  zone + " zone")
 
-        
-    # target (ground truth)
-    classes = map_to_classes( target, thresholds_in_cent_mm)
-    i = len(inputs) 
-    for c in classes:
-        plt.subplot( nlines+2, n//nlines, i+1)
-        plt.axis('off')
-        plt.imshow(c[0])
-        i += 1
+    pl=ax[0,1].pcolormesh(lon, lat, data[1,:,:],cmap=cmap, norm=norm)
+    ax[0,1].set_title(str(dates[1]) + " - "+  zone + " zone")
 
-    # estimated 
-    print(estimated.shape)
-    for j in range(estimated.shape[1]):
-        plt.subplot( nlines+2, n//nlines, i+1)
-        plt.axis('off')
-        plt.imshow(estimated[0][j]>0.5)
-        i += 1
+    pl=ax[1,0].pcolormesh(lon, lat, data[2,:,:],cmap=cmap, norm=norm)
+    ax[1,0].set_xlabel('longitude (degrees_east)')
+    ax[1,0].set_ylabel('latitude (degrees_north)')
+    ax[1,0].set_title(str(dates[2]) + " - "+  zone + " zone")
+
+    pl=ax[1,1].pcolormesh(lon, lat, data[3,:,:],cmap=cmap, norm=norm)
+    ax[1,1].set_xlabel('longitude (degrees_east)')
+    ax[1,1].set_title(str(dates[3]) + " - "+  zone + " zone")
+
+    # Plot the color bar
+    cbar = fig.colorbar(pl,ax=ax.ravel().tolist(),cmap=cmap, norm=norm, boundaries=bounds, ticks=bounds, 
+                    orientation= 'vertical').set_label('Rainfall (in 1/100 mm) / -1 : missing values')
     plt.show()
 
 
-view_inference( batch['inputs'][0],
-                batch['target'],
-                model(batch['inputs']).detach().numpy(),
-                thresholds_in_cent_mm
-               )
+coord = np.load('data/radar_coords_NW.npz',allow_pickle=True)
+from data.constants import *
+
+lon = coord['lons'][lat_extract_start:lat_extract_end, lon_extract_start:lon_extract_end]
+lat = coord['lats'][lat_extract_start:lat_extract_end, lon_extract_start:lon_extract_end]
+
+data,dates = get_data('data/rainmaps/', (2017,1,28,12, 10), 4)
+
+plot_meteonet_rainmaps(data,dates,lon,lat, zone, 'Rainmaps with Meteonet style')
+
+
+# autre colormap pluie: https://unidata.github.io/python-gallery/examples/Precipitation_Map.html#sphx-glr-download-examples-precipitation-map-py
