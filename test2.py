@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import colors
 from loader.utilities import load_map, next_date, split_date
-
+from os.path import isfile
 
 def get_data( ddir, date, num):
     y,M,d,h,m = date
@@ -53,15 +53,24 @@ def plot_meteonet_rainmaps( data, dates, lon, lat, zone, title):
     plt.show()
 
 
-coord = np.load('data/radar_coords_NW.npz',allow_pickle=True)
-from data.constants import *
+if isfile('data/rainmaps/y2018-M2-d5-h18-m55.npz'):
+    print('reduced dataset')
+    from data.constants import *
+    datadir = "data"
+elif isfile('meteonet/rainmaps/y2018-M11-d9-h0-m0.npz'):
+    print('full dataset')
+    datadir = "meteonet"
+    from meteonet.constants import *
+else:
+    print('No dataset found. Please download one with download-meteonet-*.sh scripts.')
+
+coord = np.load(f'{datadir}/radar_coords_NW.npz',allow_pickle=True)
 
 lon = coord['lons'][lat_extract_start:lat_extract_end, lon_extract_start:lon_extract_end]
 lat = coord['lats'][lat_extract_start:lat_extract_end, lon_extract_start:lon_extract_end]
 
-data,dates = get_data('data/rainmaps/', (2017,1,28,12, 10), 4)
+data,dates = get_data(f'{datadir}/rainmaps/', (2017,3,1,12, 10), 4)
 
 plot_meteonet_rainmaps(data,dates,lon,lat, zone, 'Rainmaps with Meteonet style')
-
 
 # autre colormap pluie: https://unidata.github.io/python-gallery/examples/Precipitation_Map.html#sphx-glr-download-examples-precipitation-map-py

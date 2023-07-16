@@ -1,13 +1,19 @@
 from loader.meteonet import MeteonetDataset
-from loader.sampler import items_to_oversample, meteonet_sequential_sampler
-from loader.utilities import split_date
+from loader.samplers import meteonet_sequential_sampler
+# from loader.utilities import split_date
 from tqdm import tqdm
 from glob import glob
-from os.path import basename
-
+from os.path import basename, isfile
 from torch.utils.data import DataLoader
 
-files = glob( "data/rainmaps/*.npz")
+if isfile('data/rainmaps/y2018-M2-d5-h18-m55.npz'):
+    print('reduced dataset')
+    files = glob( "data/rainmaps/*.npz")
+elif isfile('meteonet/rainmaps/y2018-M11-d9-h0-m0.npz'):
+    print('full dataset')
+    files = glob( "meteonet/rainmaps/*.npz")
+else:
+    print('No dataset found. Please download one with download-meteonet-*.sh scripts.')
 
 # from loader.utilities import get_files, next_date, split_date
 # files = sorted(files, key=lambda f:split_date(f))
