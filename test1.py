@@ -6,7 +6,7 @@ from glob import glob
 from os.path import basename, isfile
 from torch.utils.data import DataLoader
 
-if isfile('data/.reduced_data'):
+if isfile('data/.reduced_dataset'):
     print('reduced dataset')
 elif isfile('data/.full_dataset'):
     print('full dataset')
@@ -28,7 +28,7 @@ files = glob( "data/rainmaps/y201[67]-*.npz")
 
 print(f"Time to read and indexing {len(files)} files...")
 train = MeteonetDataset( files, 12, 18, 12, tqdm=tqdm) #, wind_dir='data/windmaps') 
-print(f"found {len(train.params['missing_dates'])} missing dates:")
+print(f"found {len(train.params['missing_dates'])} missing dates")
 
 print("Time to iterate the dataset ...")
 for d in tqdm(train, unit=' items'): pass
