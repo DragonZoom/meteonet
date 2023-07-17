@@ -1,10 +1,28 @@
 #!/bin/bash
 
-if ! [ -f meteonet/rainmaps/y2018-M11-d9-h0-m0.npz ]; then
+if ! [ -f data/.full_dataset ]; then
+    echo 'Download Meteonet full dataset...'
     curl https://pequan.lip6.fr/~bereziat/rain-nowcasting/meteonet.tgz --output meteonet.tgz
-    tar xvfz meteonet.tgz
-    rm meteonet.tgz
-else
-    echo "Meteonet dataset already downloaded: good!"
-fi
 
+    echo 'Extract archive...'
+    tar xfz meteonet.tgz
+    rm meteonet.tgz
+
+    echo 'Reorganize datatset...'
+    mv data/rainmap data/rainmaps
+    for y in 16 17; do
+	for M in {1..12}; do
+	    mv data/rainmaps/train/y20$y-M$M-*.npz data/rainmaps/
+	done
+    done
+    for M in {1..12}; do
+	mv data/rainmaps/val/*-M$M-*.npz data/rainmaps/
+    done
+    rm -rf data/rainmaps/{train,val}
+
+    mv data/wind data/windmaps
+    rm -rf data/windmaps/{U,V}/PPMatrix
+
+else
+    echo "Meteonet full dataset already downloaded: good!"
+fi
