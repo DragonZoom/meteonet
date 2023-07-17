@@ -29,17 +29,17 @@ clip_grad    = 0.1
 
 val_step     = 1
 
-if os.path.isfile( 'data/rainmaps/y2018-M2-d5-h18-m55.npz'):
-    datadir = 'data'
-elif os.path.isfile( 'meteonet/rainmaps/y2018-M11-d9-h0-m0.npz'):
-    datadir = 'meteonet'
+if os.path.isfile( 'data/.full_dataset'):
+    dataset_size = 'full'
+elif os.path.isfile( 'data/.reduced_dataset'):
+    datadset_size = 'reduced'
 else:
     print( 'No dataset found. Please download one with download-meteonet-*.sh scripts.')
     exit (1)
 
 print(f"""
 Data params:
-   {datadir = }
+   {dataset_size = }
    {input_len = } (history of {12*5} minutes)
    {time_horizon = } (nowcasting at {time_horizon*5} minutes)
    {stride = }
@@ -58,8 +58,8 @@ Others params:
    {val_step = }
 """)
 
-train_files = glob(f'{datadir}/rainmaps/y201[67]-*')
-val_test_files = glob(f'{datadir}/rainmaps/y2018-*')
+train_files = glob(f'data/rainmaps/y201[67]-*')
+val_test_files = glob(f'data/rainmaps/y2018-*')
 
 # split in validation/test sets according to Section 4.1 from [1]
 val_files = []

@@ -12,51 +12,82 @@ epsilon = 1e-3 # As Antonia
 
 class MeteonetDataset(Dataset):
     """ A class to load Meteonet data
-        V1 limitations:
-         - no windmaps
+        Limitations:
          - no multiple targets
         Difference with the vanilla dataloader
          - maps having missing values are no more ignored
 
       Stratégie:
          l'indexation a lieu pendant l'instantiation de la classe.
-         on peut la sauvegarder dans un cache.
+         on peut la sauvegarder dans un cache
          il n'y a plus de calcul dans getitem(), ce dernier se contente de
          charger directement les fichiers grâce à l'index.
          Quand une date manque, getitem() retourne None
          les dates manquantes sont consultats dans la variable missing_date de la classe.
     """
-    def __init__(self, files, input_len = 12, target_pos = 18, stride = 12, cached=False, tqdm=False, logging=False):
+    def __init__(self, rainmaps, input_len = 12, target_pos = 18, stride = 12, wind_dir=None, cached=False, tqdm=False, logging=False):
         """
-        files: list of files (will be sorted)
+        files: list of file name paths (will be sorted),
+
+        windir: directory where wind maps are stored
+                should contain two subdirectories, U/ and V/,
+
         input_len: number of maps to read as input of the model
-                   recommended: 12 (stands for 1 hour)
+                   recommended: 12 (stands for 1 hour),
+
         target_pos: position of target starting from the first map read as input
-                    recommended: 18 = 12+6 (prevision horizon time at 6 = 30 minutes)
+                    recommended: 18 = 12+6 (prevision horizon time at 6 = 30 minutes),
+
         stride: offset between each input sequence
-                recommended: input_len (for no overlapping)
+                recommended: input_len (for no overlapping),
+
         cached: store dataset indexation in a cache file
         """
-        files = sorted(files, key=lambda f:split_date(f))
+        files = sorted(rainmaps, key=lambda f:split_date(f))
         recalculate = True
         if cached and isfile(cached):
             obj = np.load(cached,allow_pickle=True)
             params = obj['arr_0'].reshape(-1)[0]
             if params['input_len'] == input_len and  params['stride'] == stride and \
-               params['target_pos'] == target_pos and params['files'] == files:
+               params['target_pos'] == target_pos and params['files'] == files and params['wind_dir'] == wind_dir:
                 recalculate = False
 
         if recalculate:
             if tqdm: print('parameters changed, or cached file not found: indexing dataset, please wait...')
             params = {'files': files,
-                      'input_len': input_len, 'target_pos': target_pos, 'stride': stride}
+                      'input_len': input_len, 'target_pos': target_pos, 'stride': stride,
+                      'wind_dir': wind_dir}
             maxs = []
+            Umean = Vmean = 0.
+            Uvar = Vvar = 0.
+            size = 0.
+            has_wind = []
             for f in tqdm(files, unit=' files') if tqdm else files:
-                maxs.append( load_map(f).max())                
-            params['maxs'] = np.array(maxs)
+                maxs.append( load_map(f).max())
+                if wind_dir:
+                    Upath = join(wind_dir,'U',basename(f))
+                    Vpath = join(wind_dir,'V',basename(f))
+                    if isfile(Upath) and isfile(Vpath):
+                        U = np.array(load_map(Upath), dtype=float)
+                        Umean += U.sum()
+                        Uvar += (U**2).sum()
+                        V = load_map(Vpath)*1.
+                        Vmean += V.sum()
+                        Vvar += (V**2).sum()
+                        size += U.size
+                        has_wind.append(True)
+                    else:
+                        has_wind.append(False)
 
+                    Umean /= size
+                    Vmean /= size
+                    params['U_moments'] = Umean, np.sqrt(Uvar/size - Umean**2)
+                    params['V_moments'] = Vmean, np.sqrt(Vvar/size - Vmean**2)    
+
+            params['maxs'] = np.array(maxs)
             l = len(files)
             items = []
+
             dname = dirname(files[0])
             missing_dates = []
             for j in range(0, len(files), stride):
@@ -93,6 +124,7 @@ class MeteonetDataset(Dataset):
                 items.append(item)
 
             params['items'] = np.array(items)
+            params['has_wind'] = has_wind
             params['missing_dates'] = missing_dates
             if cached:
                 np.savez_compressed( cached, params)
@@ -111,10 +143,18 @@ class MeteonetDataset(Dataset):
     def read(self, idx):
         if self.do_not_read_map:
             return torch.zeros((1,1)), torch.zeros((1,1))
-        file = self.params['files'][idx]
         ## Anastase: tensor() ou Tensor() ?
-        rainmap = torch.Tensor(load_map(file))
+        rainmap = torch.Tensor(load_map(self.params['files'][idx]))
         return torch.log(rainmap.unsqueeze(0) + 1 + epsilon)/self.norm_factor, rainmap
+
+    def read_wind(self, idx):
+        if self.do_not_read_map:
+            return torch.zeros((1,1)), torch.zeros((1,1))
+        m,s = self.params['U_moments']
+        U = torch.Tensor(load_map( join(self.params['wind_dir'],'U',basename(self.params['files'][idx])))-m)/s
+        m,s = self.params['V_moments']
+        V = torch.Tensor(load_map( join(self.params['wind_dir'],'V',basename(self.params['files'][idx])))-m)/s
+        return U.unsqueeze(0),V.unsqueeze(0)
 
     def __getitem__(self, i):
         item = self.params['items'][i]
@@ -125,10 +165,17 @@ class MeteonetDataset(Dataset):
             return None
 
         maps, _ = self.read(item[0])
-        for idx in item[1:self.params['input_len']]:
+        for idx in item[1:-1]:
             rmap, persistence = self.read(idx)
             maps = torch.cat((maps, rmap), dim=0)
-
+        if self.params['wind_dir']:
+            for idx in item[:-1]:
+                if self.params['has_wind'][idx]:
+                    U, V = self.read_wind(idx)
+                    maps = torch.cat((maps, U, V), dim=0)
+                else:
+                    return None
+                
         target_file = self.params['files'][item[-1]]
         
         return {

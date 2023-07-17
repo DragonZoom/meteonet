@@ -53,23 +53,21 @@ def plot_meteonet_rainmaps( data, dates, lon, lat, zone, title):
     plt.show()
 
 
-if isfile('data/rainmaps/y2018-M2-d5-h18-m55.npz'):
+if isfile('data/.reduced_dataset')
     print('reduced dataset')
-    from data.constants import *
-    datadir = "data"
-elif isfile('meteonet/rainmaps/y2018-M11-d9-h0-m0.npz'):
-    print('full dataset')
-    datadir = "meteonet"
-    from meteonet.constants import *
+elif isfile('data/.full_dataset')
+    print('full dataset')    
 else:
     print('No dataset found. Please download one with download-meteonet-*.sh scripts.')
+    exit(1)
 
-coord = np.load(f'{datadir}/radar_coords_NW.npz',allow_pickle=True)
+from data.constants import *
+coord = np.load(f'data/radar_coords_NW.npz',allow_pickle=True)
 
 lon = coord['lons'][lat_extract_start:lat_extract_end, lon_extract_start:lon_extract_end]
 lat = coord['lats'][lat_extract_start:lat_extract_end, lon_extract_start:lon_extract_end]
 
-data,dates = get_data(f'{datadir}/rainmaps/', (2017,3,1,12, 10), 4)
+data,dates = get_data(f'data/rainmaps/', (2017,3,1,12, 10), 4)
 
 plot_meteonet_rainmaps(data,dates,lon,lat, zone, 'Rainmaps with Meteonet style')
 

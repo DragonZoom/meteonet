@@ -6,14 +6,15 @@ from glob import glob
 from os.path import basename, isfile
 from torch.utils.data import DataLoader
 
-if isfile('data/rainmaps/y2018-M2-d5-h18-m55.npz'):
+if isfile('data/.reduced_data'):
     print('reduced dataset')
-    files = glob( "data/rainmaps/*.npz")
-elif isfile('meteonet/rainmaps/y2018-M11-d9-h0-m0.npz'):
+elif isfile('data/.full_dataset'):
     print('full dataset')
-    files = glob( "meteonet/rainmaps/*.npz")
 else:
     print('No dataset found. Please download one with download-meteonet-*.sh scripts.')
+    exit(1)
+
+files = glob( "data/rainmaps/y201[67]-*.npz")
 
 # from loader.utilities import get_files, next_date, split_date
 # files = sorted(files, key=lambda f:split_date(f))
@@ -26,7 +27,7 @@ else:
 #        print( f'{tmpdate} missing')
 
 print(f"Time to read and indexing {len(files)} files...")
-train = MeteonetDataset( files, 12, 18, 12, tqdm=tqdm)
+train = MeteonetDataset( files, 12, 18, 12, tqdm=tqdm) #, wind_dir='data/windmaps') 
 print(f"found {len(train.params['missing_dates'])} missing dates:")
 
 print("Time to iterate the dataset ...")
@@ -36,4 +37,3 @@ print("Time to iterate the batched dataset ...")
 sampler = meteonet_sequential_sampler( train)
 train = DataLoader( train, 32, sampler=sampler)
 for a in tqdm(train, unit= ' batches'): pass
-
