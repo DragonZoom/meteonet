@@ -74,8 +74,8 @@ for f in sorted(val_test_files, key=lambda f:split_date(f)):
             test_files.append(f)
 
 # datasets
-train_ds = MeteonetDataset( train_files, input_len, input_len + time_horizon, stride, cached=f'{datadir}/train.npz', tqdm=tqdm)
-val_ds   = MeteonetDataset( val_files, input_len, input_len + time_horizon, stride, cached=f'{datadir}/val.npz', tqdm=tqdm)
+train_ds = MeteonetDataset( train_files, input_len, input_len + time_horizon, stride, cached=f'data/train.npz', tqdm=tqdm)
+val_ds   = MeteonetDataset( val_files, input_len, input_len + time_horizon, stride, cached=f'data/val.npz', tqdm=tqdm)
 
 device = torch.device('cuda')
 
