@@ -1,0 +1,4 @@
+model_vinc_30m: weigths computed by Vincent (are available on the public repo)
+model_dom_30m_wind: my model trained by hyperparameters given in the seminal paper (excepted batch_size set to 128) and with rain and wind maps
+model_dom_30m_rain: my model trained by hperparmeters given in the semianl paper and without windmaps
+
