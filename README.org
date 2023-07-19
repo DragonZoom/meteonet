@@ -11,7 +11,6 @@
 * Structure of this repository (currently under developpement )
 
 :  download-meteonet.sh   # script that downloads meteonet dataset (11 Gb)
-:  meteonet/              # meteonet dataset, downloaded by previous script
 :  download-meteonet-reduced.sh  # download a small meteonet dataset (1.8 Gb)
 :  data/                  # meteonet dataset, downloaded by previous scripts
 :  loader/                # torch dataloader functions
