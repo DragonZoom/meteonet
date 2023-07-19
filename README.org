@@ -10,32 +10,32 @@
 
 * Structure of this repository (currently under developpement )
 
-:  download-meteonet.sh   # script that's downloading meteonet dataset (11 Gb)
+:  download-meteonet.sh   # script that downloads meteonet dataset (11 Gb)
 :  meteonet/              # meteonet dataset, downloaded by previous script
 :  download-meteonet-reduced.sh  # download a small meteonet dataset (1.8 Gb)
-:  data/                  # small meteonet dataset, downloaded by previous script
+:  data/                  # meteonet dataset, downloaded by previous scripts
 :  loader/                # torch dataloader functions
 :     utilities.py        # utilities functions to filter and sorted meteonet files
 :     loader.py           # contains MeteoetDataset class
 :     samplers.py         # oversampling routines
-: model/                  # U-net to test training
-: train.py                # training routine for unet, only rainmaps
-: train-wind.py           # training routine for unet, rainmaps and windmaps
+:  models/                # U-net to test training
+:  train.py               # training routine for unet, only rainmaps
+:  train-wind.py          # training routine for unet, rainmaps and windmaps
 
 * Setup
  
   - requirements: pytorch, matplotlib, numpy, tqdm
   - Usage:
-    1. download one of the two database
-    2. run train.py
+    1. download one of the two databases
+    2. run =train.py= or =train-wind.py=
        
 * Roadmap
   - =loader/meteonet.py= DONE
   - =loader/samplers.py= DONE
   - training (only rainmaps) on small dataset: DONE
   - training (only rainmaps) on large dataset: DONE
-  - training with windmaps: under developpement 
-  - scores on test set and visualisation: TODO
+  - training with windmaps: DONE
+  - scores on test set and visualisation: under developpement
   - more metrics: TODO
   - trainer class: TODO
   - more models (U-net-reg, ED-DRAP, Small-At, ...): TODO
