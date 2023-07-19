@@ -19,7 +19,8 @@
 :     loader.py           # contains MeteoetDataset class
 :     samplers.py         # oversampling routines
 : model/                  # U-net to test training
-: train.py                # training routine for unet
+: train.py                # training routine for unet, only rainmaps
+: train-wind.py           # training routine for unet, rainmaps and windmaps
 
 * Setup
  
@@ -31,11 +32,14 @@
 * Roadmap
   - =loader/meteonet.py= DONE
   - =loader/samplers.py= DONE
-  - test train for small dataset + evaluation: under developpement
-  - test train for large dataset: TODO
+  - training (only rainmaps) on small dataset: DONE
+  - training (only rainmaps) on large dataset: DONE
+  - training with windmaps: under developpement 
+  - scores on test set and visualisation: TODO
+  - more metrics: TODO
   - trainer class: TODO
   - more models (U-net-reg, ED-DRAP, Small-At, ...): TODO
-  - add README/COPYRIGHT in meteonet dataset archives: TODO 
-  - add radar_coord.npz, constants.py in meteonet dataset archives: TODO
+  - add README/COPYRIGHT in meteonet dataset archives: DONE
+  - add radar_coord.npz, constants.py in meteonet dataset archives: DONE
   
 
