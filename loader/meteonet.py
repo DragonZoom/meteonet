@@ -169,13 +169,17 @@ class MeteonetDataset(Dataset):
             rmap, persistence = self.read(idx)
             maps = torch.cat((maps, rmap), dim=0)
         if self.params['wind_dir']:
+            UVmaps = []
             for idx in item[:-1]:
                 if self.params['has_wind'][idx]:
-                    U, V = self.read_wind(idx)
-                    maps = torch.cat((maps, U, V), dim=0)
+                    UVmaps.append(self.read_wind(idx))
                 else:
                     return None
-                
+            for U,_ in UVmaps:
+                maps = torch.cat((maps, U), dim=0)
+            for _,V in UVmaps:
+                maps = torch.cat((maps, V), dim=0)
+        
         target_file = self.params['files'][item[-1]]
         
         return {
@@ -184,7 +188,6 @@ class MeteonetDataset(Dataset):
             'target_name': target_file,
             'persistence': persistence
         }
-
 class MeteonetTime(Dataset):
     """ A class to check the time cost of loading 200000 files, obsolet """
     def __init__(self, files, load = False):
