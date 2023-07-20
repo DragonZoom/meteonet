@@ -8,8 +8,7 @@ from loader.meteonet import MeteonetDataset
 from loader.samplers import meteonet_random_oversampler, meteonet_sequential_sampler
 from torch.utils.data import DataLoader
 import os, torch
-from datetime import datetime
-from loader.utilities import split_date
+from loader.filesets import filesets_bouget21
 
 ## user parameters
 input_len    = 12
@@ -58,20 +57,9 @@ Others params:
    {val_step = }
 """)
 
-train_files = glob(f'data/rainmaps/y201[67]-*')
-val_test_files = glob(f'data/rainmaps/y2018-*')
 
 # split in validation/test sets according to Section 4.1 from [1]
-val_files = []
-test_files = []
-for f in sorted(val_test_files, key=lambda f:split_date(f)):
-    year, month, day, hour, _ = split_date(f)
-    yday = datetime(year, month, day).timetuple().tm_yday - 1
-    if (yday // 7) % 2 == 0: # odd week
-        val_files.append(f)
-    else:
-        if not (yday % 7 == 0 and hour == 0): # ignore the first hour of the first day of even weeks
-            test_files.append(f)
+train_files, val_files, _ = filesets_bouget21('data/rainmaps')
 
 # datasets
 train_ds = MeteonetDataset( train_files, input_len, input_len + time_horizon, stride, cached=f'data/train.npz', tqdm=tqdm)
@@ -86,7 +74,6 @@ val_sampler = meteonet_sequential_sampler( val_ds)
 # dataloaders
 train_loader = DataLoader(train_ds, batch_size, sampler=train_sampler, num_workers=8, pin_memory=True)
 val_loader   = DataLoader(val_ds, batch_size, sampler=val_sampler, num_workers=8, pin_memory=True) 
-
 
 ## Model & training procedure
 from trainer import Trainer

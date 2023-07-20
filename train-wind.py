@@ -6,10 +6,9 @@ from glob import glob
 from tqdm import tqdm
 from loader.meteonet import MeteonetDataset
 from loader.samplers import meteonet_random_oversampler, meteonet_sequential_sampler
+from loader.filesets import filesets_bouget21
 from torch.utils.data import DataLoader
 import os, torch
-from datetime import datetime
-from loader.utilities import split_date
 
 ## user parameters
 input_len    = 12
@@ -22,7 +21,7 @@ oversampling = 0.9 # oversampling of the last class
 modelsize    = 8 # to do
 
 epochs       = 20
-batch_size   = 256
+batch_size   = 128
 lr           = {0:8e-4, 4:1e-4}
 wd           = {0:1e-5 ,4:5e-5} # 1e-8
 clip_grad    = 0.1
@@ -58,20 +57,8 @@ Others params:
    {val_step = }
 """)
 
-train_files = glob(f'data/rainmaps/y201[67]-*')
-val_test_files = glob(f'data/rainmaps/y2018-*')
-
 # split in validation/test sets according to Section 4.1 from [1]
-val_files = []
-test_files = []
-for f in sorted(val_test_files, key=lambda f:split_date(f)):
-    year, month, day, hour, _ = split_date(f)
-    yday = datetime(year, month, day).timetuple().tm_yday - 1
-    if (yday // 7) % 2 == 0: # odd week
-        val_files.append(f)
-    else:
-        if not (yday % 7 == 0 and hour == 0): # ignore the first hour of the first day of even weeks
-            test_files.append(f)
+train_files, val_files, _ = filesets_bouget21('data/rainmaps')
 
 # datasets
 train_ds = MeteonetDataset( train_files, input_len, input_len + time_horizon, stride, wind_dir='data/windmaps', cached=f'data/train-wind.npz', tqdm=tqdm)

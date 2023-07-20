@@ -1,9 +1,8 @@
 from loader.meteonet import MeteonetDataset
 from loader.samplers import meteonet_sequential_sampler
-# from loader.utilities import split_date
 from tqdm import tqdm
 from glob import glob
-from os.path import basename, isfile
+from os.path import isfile
 from torch.utils.data import DataLoader
 
 if isfile('data/.reduced_dataset'):

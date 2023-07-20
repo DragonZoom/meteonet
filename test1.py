@@ -1,10 +1,9 @@
 from loader.meteonet import MeteonetDataset
 from loader.samplers import meteonet_sequential_sampler
-# from loader.utilities import split_date
 from tqdm import tqdm
 from glob import glob
-from os.path import basename, isfile
 from torch.utils.data import DataLoader
+from os.path import isfile
 
 if isfile('data/.reduced_dataset'):
     print('reduced dataset')
@@ -27,7 +26,7 @@ files = glob( "data/rainmaps/y201[67]-*.npz")
 #        print( f'{tmpdate} missing')
 
 print(f"Time to read and indexing {len(files)} files...")
-train = MeteonetDataset( files, 12, 18, 12, tqdm=tqdm) #, wind_dir='data/windmaps') 
+train = MeteonetDataset( files, 12, 18, 12, tqdm=tqdm)
 print(f"found {len(train.params['missing_dates'])} missing dates")
 
 print("Time to iterate the dataset ...")
