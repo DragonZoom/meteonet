@@ -129,7 +129,8 @@ class MeteonetDataset(Dataset):
             if cached:
                 np.savez_compressed( cached, params)
         
-        self.params['has_wind'] = np.array(parms['has_wind']) # provisoire, pour ne pas refaire les indexations
+        params['has_wind'] = np.array(params['has_wind']) # provisoire, pour ne pas refaire les indexations
+        
         self.logging = logging
         self.tqdm = tqdm
         self.norm_factor = np.log(1+params['maxs'].max())
