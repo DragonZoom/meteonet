@@ -129,6 +129,7 @@ class MeteonetDataset(Dataset):
             if cached:
                 np.savez_compressed( cached, params)
         
+        self.params['has_wind'] = np.array(parms['has_wind']) # provisoire, pour ne pas refaire les indexations
         self.logging = logging
         self.tqdm = tqdm
         self.norm_factor = np.log(1+params['maxs'].max())
@@ -169,16 +170,14 @@ class MeteonetDataset(Dataset):
             rmap, persistence = self.read(idx)
             maps = torch.cat((maps, rmap), dim=0)
         if self.params['wind_dir']:
-            UVmaps = []
-            for idx in item[:-1]:
-                if self.params['has_wind'][idx]:
-                    UVmaps.append(self.read_wind(idx))
-                else:
-                    return None
-            for U,_ in UVmaps:
-                maps = torch.cat((maps, U), dim=0)
-            for _,V in UVmaps:
-                maps = torch.cat((maps, V), dim=0)
+            if not self.params['has_wind'][item[:-1]].all():
+                return None
+            Umaps, Vmaps = self.read_wind(item[0])
+            for idx in item[1:-1]:                
+                U,V = self.read_wind(idx)
+                Umaps = torch.cat((Umaps, U), dim=0)
+                Vmaps = torch.cat((Vmaps, V), dim=0)
+            maps = torch.cat((maps, Umaps, Vmaps), dim=0)
         
         target_file = self.params['files'][item[-1]]
         
@@ -188,6 +187,7 @@ class MeteonetDataset(Dataset):
             'target_name': target_file,
             'persistence': persistence
         }
+
 class MeteonetTime(Dataset):
     """ A class to check the time cost of loading 200000 files, obsolet """
     def __init__(self, files, load = False):
