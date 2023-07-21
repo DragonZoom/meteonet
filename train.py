@@ -9,6 +9,7 @@ from loader.samplers import meteonet_random_oversampler, meteonet_sequential_sam
 from torch.utils.data import DataLoader
 import os, torch
 from loader.filesets import filesets_bouget21
+from datetime import datetime
 
 ## user parameters
 input_len    = 12
@@ -64,6 +65,7 @@ train_files, val_files, _ = filesets_bouget21('data/rainmaps')
 # datasets
 train_ds = MeteonetDataset( train_files, input_len, input_len + time_horizon, stride, cached=f'data/train.npz', tqdm=tqdm)
 val_ds   = MeteonetDataset( val_files, input_len, input_len + time_horizon, stride, cached=f'data/val.npz', tqdm=tqdm)
+val_ds.norm_factor = train_ds.norm_factor
 
 device = torch.device('cuda')
 
