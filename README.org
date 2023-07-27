@@ -14,9 +14,11 @@
 :  download-meteonet-reduced.sh  # download a small meteonet dataset (1.8 Gb)
 :  data/                  # meteonet dataset, downloaded by previous scripts
 :  loader/                # torch dataloader functions
-:     utilities.py        # utilities functions to filter and sorted meteonet files
-:     loader.py           # contains MeteoetDataset class
+:     utilities.py        # various functions
+:     meteonet.py         # the MeteonetDataset class
 :     samplers.py         # oversampling routines
+      filesets.py         # split meteonet files in train/val/test
+      plots.py            # plot functions
 :  models/                # U-net to test training
 :  train.py               # training routine for unet, only rainmaps
 :  train-wind.py          # training routine for unet, rainmaps and windmaps
