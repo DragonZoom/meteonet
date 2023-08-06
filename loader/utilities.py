@@ -17,7 +17,7 @@ def load_map(npz):
 def map_to_classes( rainmap, thresholds):
     # Array * List[float] -> Array[bool]
     # return np.array([rainmap >= th for th in thresholds])
-    # version torch tensor
+    # version torch tensor, require a 4-D tensor
     return torch.cat([1.*(rainmap >= th).unsqueeze(1) for th in thresholds], dim=1)
 
 def next_date(filename, ext='npz'):
@@ -52,3 +52,33 @@ def get_item_by_date(ds, date):
         return None
     idx, _ = np.where(items[:,:-1]==files.index(f))
     return idx[0]
+
+def calculate_TP_TN_FP_FN( pred, true):
+    """ BCNM*BCNM
+    """
+    n = pred.shape[0]*pred.shape[2]*pred.shape[3]
+    diff = 2*pred - 1*true
+    TP = torch.sum(diff==1,dim=(0,2,3)).unsqueeze(0)
+    FP = torch.sum(diff==2,dim=(0,2,3)).unsqueeze(0)
+    FN = torch.sum(diff==-1,dim=(0,2,3)).unsqueeze(0)
+    TN = n - TP - FP - FN
+    return torch.cat((TP, TN, FP, FN),dim=0)
+
+def calculate_scores( TP_TN_FP_FN):
+    TP, TN, FP, FN = TP_TN_FP_FN
+
+    precis = TP/(TP+FP)  # c'est le POD d'Aniss
+    recall = TP/(TP+FN)
+    f1 = 2*precis*recall/(precis+recall+1e-10) # if precis>0 or recall>0 else np.nan
+
+    csi = TP/(TP+FP+FN)  # c'est le Threat Score, ou le FMS d'Aniss
+
+    bias = (TP+FP)/(TP+FN)  # c'est aussi precis/recall
+
+    n = TP+TN+FP+FN 
+    rc = ((TP+FP)*(TP+FN) + (TN+FP)*(TN+FN))/n
+    hss = (TP+TN-rc)/(n-rc)   # manque d'info sur cette métrique
+
+    far = FP / (FP+TN)  # utilisé par Aniss
+    
+    return precis.numpy(), recall.numpy(), f1.numpy(), csi.numpy(), bias.numpy(), hss.numpy(), far.numpy()
