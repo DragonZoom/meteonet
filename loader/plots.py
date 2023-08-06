@@ -2,7 +2,7 @@
 
 import matplotlib.pyplot as plt
 from matplotlib import colors
-from loader.utilities import get_item_by_date, load_map, split_date
+from loader.utilities import get_item_by_date, load_map, split_date, map_to_classes
 import torch
 
 # autre colormap pluie: https://unidata.github.io/python-gallery/examples/Precipitation_Map.html#sphx-glr-download-examples-precipitation-map-py
@@ -81,4 +81,38 @@ def plot_inference(ds, date, model, thresholds, lon, lat, zone, title):
     ax[1].set_title(f'{y}/{M}/{d} {h}:{m} Truth')
     ax[1].pcolormesh(lon, lat, true, cmap=cmap) 
 
+    plt.show()
+
+def plot_TPFPFN( dataset, date, model, thresholds, c):
+    """
+        for a given date in a dataset and a class c, plot prediction and ground-truth, true positives, false positives 
+        and false negative
+    """
+    idx = get_item_by_date(dataset, date)
+    if idx == None: return None
+
+    item = dataset[idx]
+    print(item['inputs'].unsqueeze(0).shape)
+    with torch.no_grad():
+        y_hat = model(item['inputs'].unsqueeze(0))
+
+    true = map_to_classes(item['target'].unsqueeze(0), thresholds)
+    pred = (torch.sigmoid(y_hat) > 0.5)
+    
+    plt.figure(figsize=(10,10))
+    plt.suptitle( f'class {c}')
+    plt.subplot(2,2,1)
+    plt.imshow(pred[0,c]*1 + 2*true[0,c])
+    plt.subplot(2,2,2)
+    TP = pred[0,c]*true[0,c]
+    plt.title(f'TP: {int(TP.sum())}')
+    plt.imshow(TP)
+    plt.subplot(2,2,3)
+    FP = pred[0,c]*(true[0,c]==False)
+    plt.title(f'FP: {int(FP.sum())}')
+    plt.imshow(FP)
+    plt.subplot(2,2,4)
+    FN = (pred[0,c] == False)*(true[0,c])
+    plt.title(f'FN: {int((FN).sum())}')
+    plt.imshow(FN)
     plt.show()
