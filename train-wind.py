@@ -10,6 +10,7 @@ from loader.filesets import filesets_bouget21
 from torch.utils.data import DataLoader
 import os, torch
 from datetime import datetime
+from platform import processor # for M1/M2 support
 
 ## user parameters
 input_len    = 12
@@ -28,6 +29,15 @@ wd           = {0:1e-5 ,4:5e-5} # 1e-8
 clip_grad    = 0.1
 
 val_step     = 1
+
+if torch.backends.cuda.is_built() and torch.cuda.is_available():
+    device   = 'cuda'
+elif torch.backends.mps.is_built():
+    device    = 'mps'
+else:
+    device   = 'cpu'
+
+num_workers  = 8 if processor() != 'arm' else 0 # no multithreadings on M1/M2 :(
 
 if os.path.isfile( 'data/.full_dataset'):
     dataset_size = 'full'
@@ -55,7 +65,9 @@ Train params:
    {clip_grad = }
 
 Others params:
+   {device = }
    {val_step = }
+   {num_workers = }
 """)
 
 # split in validation/test sets according to Section 4.1 from [1]
@@ -68,19 +80,18 @@ val_ds.norm_factor = train_ds.norm_factor
 val_ds.params['U_moments'] = train_ds.params['U_moments']
 val_ds.params['V_moments'] = train_ds.params['V_moments']
 
-device = torch.device('cuda')
+device = torch.device(device)
 
 # samplers for dataloaders
 train_sampler = meteonet_random_oversampler( train_ds, thresholds[-1], oversampling)
 val_sampler = meteonet_sequential_sampler( val_ds)
 
 # dataloaders
-train_loader = DataLoader(train_ds, batch_size, sampler=train_sampler, num_workers=8, pin_memory=True)
-val_loader   = DataLoader(val_ds, batch_size, sampler=val_sampler, num_workers=8, pin_memory=True) 
+train_loader = DataLoader(train_ds, batch_size, sampler=train_sampler, num_workers=num_workers, pin_memory=True)
+val_loader   = DataLoader(val_ds, batch_size, sampler=val_sampler, num_workers=num_workers, pin_memory=True) 
 
 
 ## Model & training procedure
-from trainer import Trainer
 import torch.nn as nn
 from torch.optim import Adam
 from models.unet import UNet
@@ -126,7 +137,6 @@ size of  files/items/batch
 TPFPFN_pers = 0
 print('eval persistence...')
 for batch in tqdm(val_loader):
-    _,y = get_xy(batch)
     TPFPFN_pers += calculate_TPFPFN(map_to_classes(batch['persistence'], thresholds),
                                     map_to_classes(batch['target'], thresholds))
 _, _, f1_pers =  calculate_scores( TPFPFN_pers)
@@ -200,6 +210,7 @@ if True:
     plt.plot(val_losses)
     plt.show()
 
+#from trainer import Trainer
 #trainer = Trainer( model, loss, solver, get_xy, 'runs', device, 0.1)
 #train_loss, valid_loss = trainer.fit( train_loader, val_loader, epochs)
 
