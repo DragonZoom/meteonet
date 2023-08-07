@@ -65,13 +65,16 @@ def calculate_TP_TN_FP_FN( pred, true):
     return torch.cat((TP, TN, FP, FN),dim=0)
 
 def calculate_scores( TP_TN_FP_FN):
+    """ Calculate: precision, recall, F1, Threat Scrore, Bias, HSS, FAR, Accuracy, ETS, ORSS
+        see Bouget et al, 2021 and Kumar et al, 2020
+    """
     TP, TN, FP, FN = TP_TN_FP_FN
 
     precis = TP/(TP+FP)  # c'est le POD d'Aniss
     recall = TP/(TP+FN)
     f1 = 2*precis*recall/(precis+recall+1e-10) # if precis>0 or recall>0 else np.nan
 
-    csi = TP/(TP+FP+FN)  # c'est le Threat Score, ou le FMS d'Aniss
+    ts = TP/(TP+FP+FN)  # c'est le Threat Score, ou le FMS d'Aniss
 
     bias = (TP+FP)/(TP+FN)  # c'est aussi precis/recall
 
@@ -80,5 +83,12 @@ def calculate_scores( TP_TN_FP_FN):
     hss = (TP+TN-rc)/(n-rc)   # manque d'info sur cette métrique
 
     far = FP / (FP+TN)  # utilisé par Aniss
-    
-    return precis.numpy(), recall.numpy(), f1.numpy(), csi.numpy(), bias.numpy(), hss.numpy(), far.numpy()
+
+    n = TP+TN+FP+FN
+    accuracy = (TP+TN) / n
+
+    TP_r = (TP+FN)*(TP+FP) / n
+    ets = (TP-TP_r)/(TP+FP+FN-TP_r)
+    orss = (TP*TN - FP*FN)/(TP*TN + FP*FN)
+
+    return precis.numpy(), recall.numpy(), f1.numpy(), ts.numpy(), bias.numpy(), hss.numpy(), far.numpy(), accuracy.numpy(), ets.numpy(), orss.numpy()

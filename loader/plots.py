@@ -63,7 +63,8 @@ def plot_inference(ds, date, model, thresholds, lon, lat, zone, title):
 
     y,M,d,h,m = split_date(item['target_name'])
 
-    pred = 1*(torch.sigmoid(pred[0,0])>.5) + (torch.sigmoid(pred[0,1])>.5) + (torch.sigmoid(pred[0,2])>.5)    
+    pred = 1*(torch.sigmoid(pred[0,0])>.5) + (torch.sigmoid(pred[0,1])>.5) + (torch.sigmoid(pred[0,2])>.5)
+    pred[0,0] = 3
     true = 1*(item['target']>thresholds[0]) + (item['target']>thresholds[1]) + (item['target']>thresholds[2])
     
     cmap = colors.ListedColormap(['white', 'mediumblue','skyblue','cyan'])

@@ -36,11 +36,12 @@
   - training (only rainmaps) on small dataset: DONE
   - training (only rainmaps) on large dataset: DONE
   - training with windmaps: DONE
-  - scores on test set and visualisation: under developpement
-  - more metrics: TODO
-  - trainer class: TODO
-  - more models (U-net-reg, ED-DRAP, Small-At, ...): TODO
+  - scores on test set and visualisation: DONE
+  - more metrics: DONE
   - add README/COPYRIGHT in meteonet dataset archives: DONE
   - add radar_coord.npz, constants.py in meteonet dataset archives: DONE
+  - more models (U-net-reg, ED-DRAP, Small-At, ...): TODO
+  - trainer class: TODO
+  - bayesian grid search: TODO
   
 
