@@ -57,6 +57,7 @@ def plot_inference(ds, date, model, thresholds, lon, lat, zone, title):
     if idx == None: return None
 
     item = ds[idx]
+    model.eval()
     with torch.no_grad():
         pred = model(item['inputs'].unsqueeze(0))
 
@@ -93,6 +94,7 @@ def plot_TPFPFN( dataset, date, model, thresholds, c):
 
     item = dataset[idx]
     print(item['inputs'].unsqueeze(0).shape)
+    model.eval()
     with torch.no_grad():
         y_hat = model(item['inputs'].unsqueeze(0))
 
