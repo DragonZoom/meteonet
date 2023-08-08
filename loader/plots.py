@@ -7,18 +7,24 @@ import torch
 
 # autre colormap pluie: https://unidata.github.io/python-gallery/examples/Precipitation_Map.html#sphx-glr-download-examples-precipitation-map-py
 
-def plot_meteonet_rainmaps( ds, date, lon, lat, zone, title=None):
-    """ plot rainfaill inputs of an element chosen by date from a Meteonoet dataset"""
+def plot_meteonet_rainmaps( ds, date, lon=None, lat=None, zone=None, title=None, n=2, size=5):
+    """ plot rainfaill inputs of an element chosen by date from a Meteonoet dataset
+       ds: a meteonet dataset
+       date: date to display
+       lon, lat, zone: provided by data.constants
+       n: number of maps per line (2 default)
+       size: size of map (5 default)
+    """
     # inspired from https://github.com/meteofrance/meteonet/blob/master/notebooks/radar/open_rainfall.ipynb
 
     idx = get_item_by_date(ds, date)    
     if idx == None: return None
 
-    input_len = ds.params['input_len']
+    p = ds.params['input_len'] // n
     files = ds.params['files']
     items = ds.params['items']
     
-    fig, ax = plt.subplots(input_len//2, 2,figsize=(10,20))
+    fig, ax = plt.subplots( p, n, figsize=(size*n,size*p))
     if title: fig.suptitle(title, fontsize=16)
 
     # Choose the colormap
@@ -28,27 +34,26 @@ def plot_meteonet_rainmaps( ds, date, lon, lat, zone, title=None):
     bounds = [-1,0,2,4,6,8,10,15,20,25,30,35,40,45,50,55,60,65,75]
     norm = colors.BoundaryNorm(bounds, cmap.N)
 
+    zone = '' if zone is None else f' - {zone} zone' 
+    print_lat_lon = lon is not None and lat is not None
 
-    for i in range(input_len//2):
-        file = files[items[idx][2*i]]
-        data = load_map(file)
-        ax[i,0].pcolormesh(lon, lat, data, cmap=cmap, norm=norm)
-        ax[i,0].set_ylabel('latitude (degrees_north)')
-        y,M,d,h,m = split_date( file)
-        ax[i,0].set_title( f'{y}/{M}/{d} {h}:{m} - {zone} zone')
-        
-        file = files[items[idx][2*i+1]]
-        data = load_map(file)
-        pl = ax[i,1].pcolormesh(lon, lat, data, cmap=cmap, norm=norm)
-        y,M,d,h,m = split_date( file)
-        ax[i,1].set_title( f'{y}/{M}/{d} {h}:{m} - {zone} zone')
-        
-    ax[input_len//2-1,0].set_xlabel('longitude (degrees_east)')
-    ax[input_len//2-1,1].set_xlabel('longitude (degrees_east)')
+    for i in range(p):
+        for j in range(n):
+            file = files[items[idx][2*i+j]]
+            if print_lat_lon:
+                pl = ax[i,j].pcolormesh(lon, lat, load_map(file), cmap=cmap, norm=norm)
+            else:
+                pl = ax[i,j].imshow(load_map(file), cmap=cmap, norm=norm)
+            if j==0 and print_lat_lon: ax[i,0].set_ylabel('latitude (degrees_north)')
+            y,M,d,h,m = split_date( file)
+            ax[i,j].set_title( f'{y}/{M}/{d} {h}:{m}{zone}')
+    if print_lat_lon:
+        for j in range(n):
+            ax[p-1,j].set_xlabel('longitude (degrees_east)')
 
     # Plot the color bar
-    cbar = fig.colorbar(pl,ax=ax.ravel().tolist(),cmap=cmap, norm=norm, boundaries=bounds, ticks=bounds, 
-                    orientation= 'vertical').set_label('Rainfall (in 1/100 mm) / -1 : missing values')
+    fig.colorbar( pl ,ax=ax.ravel().tolist(),cmap=cmap, norm=norm, boundaries=bounds, ticks=bounds, 
+                  orientation= 'vertical').set_label('Rainfall (in 1/100 mm) / -1 : missing values')
     plt.show()
 
 def plot_inference(ds, date, model, thresholds, lon, lat, zone, title):
