@@ -77,7 +77,8 @@ def calculate_BS(CT, scores):
 
     precis = TP/(TP+FP)  # c'est le POD d'Aniss
     recall = TP/(TP+FN)
-    
+    n = TP+TN+FP+FN
+
     for sc in scores:
         if sc == 'Precision':
             scores_values.append(precis) # POD
@@ -94,15 +95,16 @@ def calculate_BS(CT, scores):
             rc = ((TP+FP)*(TP+FN) + (TN+FP)*(TN+FN))/n
             scores_values.append( (TP+TN-rc)/(n-rc))
         elif sc == 'FAR':
-            far = FP / (FP+TN) 
+            scores_values.append( FP / (FP+TN))
         elif sc == 'Accuracy': 
-            n = TP+TN+FP+FN
             scores_values.append( (TP+TN) / n)
         elif sc == 'ETS':
             TP_r = (TP+FN)*(TP+FP) / n
             scores_values.append( (TP-TP_r)/(TP+FP+FN-TP_r))
         elif sc == 'ORSS':
             scores_values.append( (TP*TN - FP*FN)/(TP*TN + FP*FN))
+        else:
+            print(f'score {sc} unkown')
 
-    return [sc.numpy() for sc in scores_values]
+    return np.array([scv.numpy() for scv in scores_values])
 
