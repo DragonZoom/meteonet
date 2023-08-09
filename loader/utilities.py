@@ -53,8 +53,8 @@ def get_item_by_date(ds, date):
     idx, _ = np.where(items[:,:-1]==files.index(f))
     return idx[0]
 
-def calculate_TP_TN_FP_FN( pred, true):
-    """ BCNM*BCNM
+def calculate_CT( pred, true):
+    """ Calculate Contigenycy Table (ie. TP, TN, FP, FN)
     """
     n = pred.shape[0]*pred.shape[2]*pred.shape[3]
     diff = 2*pred - 1*true
@@ -64,31 +64,45 @@ def calculate_TP_TN_FP_FN( pred, true):
     TN = n - TP - FP - FN
     return torch.cat((TP, TN, FP, FN),dim=0)
 
-def calculate_scores( TP_TN_FP_FN):
-    """ Calculate: precision, recall, F1, Threat Scrore, Bias, HSS, FAR, Accuracy, ETS, ORSS
-        see Bouget et al, 2021 and Kumar et al, 2020
+def calculate_BS(CT, scores):
+    """ Calculate various binary scores from the contingency table 
+        scores: list of scores to calculates. Possible values are:
+         'Precision', 'Recall', 'F1','TS','BIAS','HSS','FAR','Accuracy','ETS','ORSS'
+
+        See Bouget et al, 2021 and Kumar et al, 2020
     """
-    TP, TN, FP, FN = TP_TN_FP_FN
+    TP, TN, FP, FN = CT.to('cpu')
+
+    scores_values = []
 
     precis = TP/(TP+FP)  # c'est le POD d'Aniss
     recall = TP/(TP+FN)
-    f1 = 2*precis*recall/(precis+recall+1e-10) # if precis>0 or recall>0 else np.nan
+    
+    for sc in scores:
+        if sc == 'Precision':
+            scores_values.append(precis) # POD
+        elif sc == 'Recall':
+            scores_values.append(recall)
+        elif sc == 'F1':
+            scores_values.append(2*precis*recall/(precis+recall+1e-10))
+        elif sc == 'TS':
+            scores_values.append(TP/(TP+FP+FN))  # CSI, FMS 
+        elif sc == 'BIAS':
+            scores_values.append((TP+FP)/(TP+FN))  
+        elif sc == 'HSS':  # alternative definition, see Hogan 2009
+            n = TP+TN+FP+FN 
+            rc = ((TP+FP)*(TP+FN) + (TN+FP)*(TN+FN))/n
+            scores_values.append( (TP+TN-rc)/(n-rc))
+        elif sc == 'FAR':
+            far = FP / (FP+TN) 
+        elif sc == 'Accuracy': 
+            n = TP+TN+FP+FN
+            scores_values.append( (TP+TN) / n)
+        elif sc == 'ETS':
+            TP_r = (TP+FN)*(TP+FP) / n
+            scores_values.append( (TP-TP_r)/(TP+FP+FN-TP_r))
+        elif sc == 'ORSS':
+            scores_values.append( (TP*TN - FP*FN)/(TP*TN + FP*FN))
 
-    ts = TP/(TP+FP+FN)  # c'est le Threat Score, ou le FMS d'Aniss
+    return [sc.numpy() for sc in scores_values]
 
-    bias = (TP+FP)/(TP+FN)  # c'est aussi precis/recall
-
-    n = TP+TN+FP+FN 
-    rc = ((TP+FP)*(TP+FN) + (TN+FP)*(TN+FN))/n
-    hss = (TP+TN-rc)/(n-rc)   # manque d'info sur cette métrique
-
-    far = FP / (FP+TN)  # utilisé par Aniss
-
-    n = TP+TN+FP+FN
-    accuracy = (TP+TN) / n
-
-    TP_r = (TP+FN)*(TP+FP) / n
-    ets = (TP-TP_r)/(TP+FP+FN-TP_r)
-    orss = (TP*TN - FP*FN)/(TP*TN + FP*FN)
-
-    return precis.numpy(), recall.numpy(), f1.numpy(), ts.numpy(), bias.numpy(), hss.numpy(), far.numpy(), accuracy.numpy(), ets.numpy(), orss.numpy()
