@@ -25,7 +25,8 @@ class MeteonetDataset(Dataset):
          Quand une date manque, getitem() retourne None
          les dates manquantes sont consultats dans la variable missing_date de la classe.
     """
-    def __init__(self, rainmaps, input_len = 12, target_pos = 18, stride = 12, wind_dir=None, cached=False, tqdm=False, logging=False):
+    def __init__(self, rainmaps, input_len = 12, target_pos = 18, stride = 12,
+                 wind_dir=None, cached=None, tqdm=None, logging=False):
         """
         files: list of file name paths (will be sorted),
 
@@ -49,7 +50,8 @@ class MeteonetDataset(Dataset):
             obj = np.load(cached,allow_pickle=True)
             params = obj['arr_0'].reshape(-1)[0]
             if params['input_len'] == input_len and  params['stride'] == stride and \
-               params['target_pos'] == target_pos and params['files'] == files and params['wind_dir'] == wind_dir:
+               params['target_pos'] == target_pos and params['files'] == files and \
+               (wind_dir == None or params['wind_dir'] == wind_dir):
                 recalculate = False
 
         if recalculate:
@@ -78,11 +80,11 @@ class MeteonetDataset(Dataset):
                         has_wind.append(True)
                     else:
                         has_wind.append(False)
-
-                    Umean /= size
-                    Vmean /= size
-                    params['U_moments'] = Umean, np.sqrt(Uvar/size - Umean**2)
-                    params['V_moments'] = Vmean, np.sqrt(Vvar/size - Vmean**2)    
+            if wind_dir:
+                Umean /= size
+                Vmean /= size
+                params['U_moments'] = Umean, np.sqrt(Uvar/size - Umean**2)
+                params['V_moments'] = Vmean, np.sqrt(Vvar/size - Vmean**2)    
 
             params['maxs'] = np.array(maxs)
             l = len(files)
@@ -124,18 +126,23 @@ class MeteonetDataset(Dataset):
                 items.append(item)
 
             params['items'] = np.array(items)
-            params['has_wind'] = has_wind
+            params['has_wind'] = np.array(has_wind)
             params['missing_dates'] = missing_dates
             if cached:
                 np.savez_compressed( cached, params)
-        
-        params['has_wind'] = np.array(params['has_wind']) # provisoire, pour ne pas refaire les indexations
-        
+
         self.logging = logging
         self.tqdm = tqdm
-        self.norm_factor = np.log(1+params['maxs'].max())
         self.params = params
-        self.do_not_read_map = False
+        self.norm_factors = [np.log(1+params['maxs'].max())]
+        self.use_wind = False
+                
+        if wind_dir:
+            for v in params['U_moments']: self.norm_factors.append(v)
+            for v in params['V_moments']: self.norm_factors.append(v)
+            self.use_wind = True
+
+        self.do_not_read_map = False # for performances tests. could be removed
         
     def __len__(self):
         ## Question pour Anastase: on pourrait aussi avoir une fenêtre glissante sur les inputs_len ??
@@ -147,21 +154,25 @@ class MeteonetDataset(Dataset):
             return torch.zeros((1,1)), torch.zeros((1,1))
         ## Anastase: tensor() ou Tensor() ?
         rainmap = torch.Tensor(load_map(self.params['files'][idx]))
-        return torch.log(rainmap.unsqueeze(0) + 1 + epsilon)/self.norm_factor, rainmap
+        return torch.log(rainmap.unsqueeze(0) + 1 + epsilon)/self.norm_factors[0], rainmap
 
     def read_wind(self, idx):
         if self.do_not_read_map:
             return torch.zeros((1,1)), torch.zeros((1,1))
-        m,s = self.params['U_moments']
+        m,s = self.norm_factors[1], self.norm_factors[2]
         U = torch.Tensor(load_map( join(self.params['wind_dir'],'U',basename(self.params['files'][idx])))-m)/s
-        m,s = self.params['V_moments']
+        m,s = self.norm_factors[3], self.norm_factors[4]        
         V = torch.Tensor(load_map( join(self.params['wind_dir'],'V',basename(self.params['files'][idx])))-m)/s
         return U.unsqueeze(0),V.unsqueeze(0)
 
     def __getitem__(self, i):
         item = self.params['items'][i]
 
+        # Anastase: 
         # on peut changer ça, notamment uniquement si la target vaut -1.
+        # rappel: un index à -1 indique une date manquante.
+        # ces dates pourrait être remplacées par des images nulles,
+        # avec un minimum de deux non nulles sans doute pour inférer la dynamique
         # if item[-1] == -1:
         if item.min() == -1:
             return None
@@ -170,7 +181,7 @@ class MeteonetDataset(Dataset):
         for idx in item[1:-1]:
             rmap, persistence = self.read(idx)
             maps = torch.cat((maps, rmap), dim=0)
-        if self.params['wind_dir']:
+        if self.use_wind:
             if not self.params['has_wind'][item[:-1]].all():
                 return None
             Umaps, Vmaps = self.read_wind(item[0])
