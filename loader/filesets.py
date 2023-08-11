@@ -3,7 +3,7 @@ from loader.utilities import split_date
 from datetime import datetime
 from os.path import join
 
-def filesets_bouget21( rainmaps_dir):
+def bouget21( rainmaps_dir):
     """ 
     Split in train/validation/test sets according to Section 4.1 from Bouget et al, 2021
     """
