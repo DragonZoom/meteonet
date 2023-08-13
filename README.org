@@ -25,10 +25,15 @@
 
 * Setup
  
-  - requirements: pytorch, matplotlib, numpy, tqdm
+  - requirements: pytorch, matplotlib, numpy, tqdm, tensorboard, pandas
   - Usage:
     1. download one of the two databases
-    2. run =train.py= or =train-wind.py=
+    2. run =train-Unet.py=
+       : % python train-Unet -h   # for usage
+       : % python train-Unet      # start a training only on rainmaps with a correct hyperparameters setup
+       : % python eval--Unet      # evaluation of last run on the test sets
+       : % python train-Unet -wd data/windmaps   # start a training on rainmaps and windmaps
+       : % python eval--Unet      
        
 * Roadmap
   - =loader/meteonet.py= DONE
@@ -41,7 +46,7 @@
   - add README/COPYRIGHT in meteonet dataset archives: DONE
   - add radar_coord.npz, constants.py in meteonet dataset archives: DONE
   - more models (U-net-reg, ED-DRAP, Small-At, ...): TODO
-  - trainer class: TODO
+#  - trainer class: TODO
   - bayesian grid search: TODO
   
 

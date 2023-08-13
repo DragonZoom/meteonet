@@ -39,7 +39,7 @@ def train_meteonet_classif( train_loader, val_loader, model, thresholds, epochs,
         model.train()  
         train_loss = 0
         N = 0
-        for batch in tqdm(train_loader):
+        for batch in tqdm(train_loader, unit=' batches'):
             x,y = batch['inputs'], map_to_classes( batch['target'], thresholds)
             x,y = x.to(device), y.to(device)
 
@@ -62,7 +62,7 @@ def train_meteonet_classif( train_loader, val_loader, model, thresholds, epochs,
         val_loss = 0
         CT_pred = 0
         N = 0
-        for batch in tqdm(val_loader):
+        for batch in tqdm(val_loader, unit=' batches'):
             x,y = batch['inputs'], map_to_classes( batch['target'], thresholds)
             x,y = x.to(device), y.to(device)
             with torch.no_grad():
