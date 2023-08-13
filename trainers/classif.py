@@ -8,7 +8,7 @@ from datetime import datetime
 from loader.utilities import calculate_CT, calculate_BS, map_to_classes
 from tqdm import tqdm
 
-def train_meteonet_classif( train_loader, val_loader, model, thresholds, epochs, lr, wd,
+def train_meteonet_classif( train_loader, val_loader, model, thresholds, epochs, lr_wd,
                             snapshot_step = 5, rundir='runs', clip_grad=0.1, tqdm=tqdm, device='cpu'):
 
     print('Evaluation Persistence...')
@@ -31,8 +31,10 @@ def train_meteonet_classif( train_loader, val_loader, model, thresholds, epochs,
     val_losses = []
     val_f1, val_bias, val_ts = [], [], []
     for epoch in range(epochs):
-        if epoch in lr:
-            optimizer = Adam(model.parameters(), lr=lr[epoch], weight_decay=wd[epoch])
+        if epoch in lr_wd:
+            lr, wd = lr_wd[epoch]
+            print(f'** scheduler: new Adam parameters at epoch {epoch}: {lr,wd}')
+            optimizer = Adam(model.parameters(), lr=lr, weight_decay=wd)
         
         model.train()  
         train_loss = 0

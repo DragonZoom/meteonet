@@ -111,7 +111,7 @@ if args.wind_dir:
 else:
     model = UNet(n_channels = input_len, n_classes = len(thresholds), bilinear = True)
     
-from trainer import train_meteonet_classif
+from trainers.classif import train_meteonet_classif
 
 scores, rundir = train_meteonet_classif( train_loader, val_loader, model, args.thresholds, args.epochs, lr_wd, args.snapshot_step, rundir=args.run_dir, device = device)
 
