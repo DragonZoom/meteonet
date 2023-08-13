@@ -8,24 +8,16 @@ from torch.utils.data import DataLoader
 from loader.filesets import bouget21
 from loader.utilities import map_to_classes, calculate_CT, calculate_BS
 from platform import processor, system as sysname
-import sys, os
+import os, argparse
 
-weights_path = 'model_last_epoch.pt'
-if len(sys.argv) == 1 and os.path.isdir('lastrun'):
-    rundir = "lastrun"    
-else:
-    rundir = sys.argv[1]
-    if len(sys.argv) > 2 : 
-        weights_path = sys.argv[2]        
-weights_path = os.path.join(rundir, weights_path)
+parser = argparse.ArgumentParser( prog='eval-Unet', description='evaluation of last run on the test set')
+parser.add_argument('-rd', '--rundir', default='lastrun', type=str, help='a run directory')
+parser.add_argument('-w', '--weights', default='model_last_epoch.pt', type=str, help='name of weights file')
+args = parser.parse_args()
 
-print("""
-Usage:
-  python eval.py [rundir [weight file]]
-By defaut rundir is lastrun
-""")
+weights_path = os.path.join(args.rundir, args.weights)
 
-hyperparams = torch.load(os.path.join(rundir,'hyperparams.pt'))
+hyperparams = torch.load(os.path.join(args.rundir,'hyperparams.pt'))
 
 input_len = hyperparams['input_len']
 time_horizon = hyperparams['time_horizon']
