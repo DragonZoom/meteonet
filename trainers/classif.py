@@ -1,12 +1,14 @@
 # A training procedure for Meteonet data
 
+import torch
 import torch.nn as nn
 from torch.optim import Adam
 from torch.utils.tensorboard import SummaryWriter
-import os, torch
-from datetime import datetime
+
 from loader.utilities import calculate_CT, calculate_BS, map_to_classes
+
 from tqdm import tqdm
+from os.path import join
 
 def train_meteonet_classif( train_loader, val_loader, model, thresholds, epochs, lr_wd,
                             snapshot_step = 5, rundir='runs', clip_grad=0.1, tqdm=tqdm, device='cpu'):
@@ -18,15 +20,13 @@ def train_meteonet_classif( train_loader, val_loader, model, thresholds, epochs,
                                  map_to_classes(batch['target'], thresholds))
         f1_pers, bias_pers, ts_pers = calculate_BS( CT_pers, ['F1','BIAS','TS'])
 
-    rundir = os.path.join(rundir,f'{datetime.now()}')
-    os.system(f'mkdir -p "{rundir}"')
     writer = SummaryWriter(log_dir=rundir)
 
     loss = nn.BCEWithLogitsLoss()
     loss.to(device)
     model.to(device)
     
-    print('Start training')
+    print('Start training...')
     train_losses = []
     val_losses = []
     val_f1, val_bias, val_ts = [], [], []
@@ -91,18 +91,14 @@ def train_meteonet_classif( train_loader, val_loader, model, thresholds, epochs,
             writer.add_scalar(f'BIAS_C{c+1}', bias[c], epoch)
     
         if epoch % snapshot_step == snapshot_step-1:
-            torch.save(model.state_dict, f'{rundir}/model_epoch_{epoch}.pt')
+            torch.save(model.state_dict(), join(rundir, f'model_epoch_{epoch}.pt'))
     
-    os.system(f'rm -f lastrun; ln -sf "{rundir}" lastrun')
+    print( f'Optimisation is over. Model weights had been saved in {rundir}')
+    torch.save(model.state_dict(), join(rundir, "model_last_epoch.pt"))
 
-    scores = {'train_losses': train_losses, 'val_losses': val_losses,
-              'val_f1': val_f1, 'f1_pers': f1_pers ,
-              'val_bias': val_bias, 'bias_pers': bias_pers,
-              'val_ts': val_ts, 'ts_pers': ts_pers
-              }
+    return {'train_losses': train_losses, 'val_losses': val_losses,
+            'val_f1': val_f1, 'f1_pers': f1_pers ,
+            'val_bias': val_bias, 'bias_pers': bias_pers,
+            'val_ts': val_ts, 'ts_pers': ts_pers
+            }
 
-    print( f'Optimisation is over. Scores and weights are saved in {rundir}')
-    torch.save(model.state_dict(), rundir+"/model_last_epoch.pt")
-    torch.save(scores, rundir+"/scores.pt")
-
-    return scores, rundir

@@ -17,8 +17,8 @@ args = parser.parse_args()
 
 weights_path = os.path.join(args.rundir, args.weights)
 
-hyperparams = torch.load(os.path.join(args.rundir,'hyperparams.pt'))
-
+hyperparams = torch.load(os.path.join(args.rundir,'run_info.pt'))['hyperparams']
+print(hyperparams)
 input_len = hyperparams['input_len']
 time_horizon = hyperparams['time_horizon']
 stride = hyperparams['stride']

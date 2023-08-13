@@ -2,15 +2,8 @@
 #  An example of meteonet dataloader usage to train a U-Net 
 #  [1] Bouget et al, 2021, https://www.mdpi.com/2072-4292/13/2/246#B24-remotesensing-13-00246
 
-from loader.meteonet import MeteonetDataset
-from loader.samplers import meteonet_random_oversampler, meteonet_sequential_sampler
-from torch.utils.data import DataLoader
-import os, torch, argparse
-from loader.filesets import bouget21
-from datetime import datetime
+import argparse, torch, os
 from platform import processor # for M1/M2 support
-from tqdm import tqdm
-from os.path import join
 
 parser = argparse.ArgumentParser( prog='train-Unet', description='Traning a UNet for Meteonet nowforecast')
 
@@ -75,17 +68,26 @@ Others params:
    {device = }
    {args.snapshot_step = }
    {args.num_workers = }
+   {args.run_dir = }
 """)
+
+device = torch.device(device)
+
+from loader.filesets import bouget21
+from loader.meteonet import MeteonetDataset
+from loader.samplers import meteonet_random_oversampler, meteonet_sequential_sampler
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+from os.path import join
 
 # split in validation/test sets according to Section 4.1 from [1]
 train_files, val_files, _ = bouget21(join(args.data_dir, 'rainmaps'))
 
 # datasets
-train_ds = MeteonetDataset( train_files, input_len, input_len + time_horizon, stride, wind_dir=args.wind_dir, cached=join(args.data_dir,'train.npz'), tqdm=tqdm)
-val_ds   = MeteonetDataset( val_files, input_len, input_len + time_horizon, stride, wind_dir=args.wind_dir, cached=join(args.data_dir,'val.npz'), tqdm=tqdm)
+indexes = [join(args.data_dir,'train.npz'), join(args.data_dir,'val.npz')]
+train_ds = MeteonetDataset( train_files, input_len, input_len + time_horizon, stride, wind_dir=args.wind_dir, cached=indexes[0], tqdm=tqdm)
+val_ds   = MeteonetDataset( val_files, input_len, input_len + time_horizon, stride, wind_dir=args.wind_dir, cached=indexes[1], tqdm=tqdm)
 val_ds.norm_factors = train_ds.norm_factors
-
-device = torch.device(device)
 
 # samplers for dataloaders
 train_sampler = meteonet_random_oversampler( train_ds, thresholds[-1], args.oversampling)
@@ -106,20 +108,51 @@ size of  files/items/batch
 
 ## Model & training procedure
 from models.unet import UNet
+from trainers.classif import train_meteonet_classif
+from datetime import datetime
+
 if args.wind_dir:
     model = UNet(n_channels = input_len*3, n_classes = len(thresholds), bilinear = True)
 else:
     model = UNet(n_channels = input_len, n_classes = len(thresholds), bilinear = True)
     
-from trainers.classif import train_meteonet_classif
+#try:
 
-scores, rundir = train_meteonet_classif( train_loader, val_loader, model, args.thresholds, args.epochs, lr_wd, args.snapshot_step, rundir=args.run_dir, device = device)
+rundir = join(args.run_dir,f'{datetime.now()}')
+print(f'run files will be recorded in direction {rundir}')
+os.system(f'mkdir -p "{rundir}"')
+scores = train_meteonet_classif( train_loader, val_loader, model, thresholds, args.epochs, lr_wd, args.snapshot_step, rundir=rundir, device = device)
 
-# a mettre dans train_meteonet_classif , en l'état c'est bof
+hyperparams = { 'input_len': input_len,
+                'time_horizon': time_horizon,
+                'stride': stride, 
+                'thresholds': thresholds,
+                'batch_size': args.batch_size,
+                # 'clip_grad': clip_grad,
+                'epochs': args.epochs,
+                'lr_wd': lr_wd,
+                'oversampling': args.oversampling,
+                # 'model_size': model_size,
+                'data_dir': args.data_dir,
+                'dataset_indexes': indexes,
+                'wind_dir': args.wind_dir
+               }
+
+os.system(f'rm -f lastrun; ln -sf "{rundir}" lastrun')
+
+#except KeyboardInterrupt:     # suspend
+#        try:
+#            sys.exit(0)
+#        except SystemExit:
+#            os._exit(0)
+
+
 import torch
-torch.save( { 'input_len': input_len, 'time_horizon': time_horizon, 'stride': stride,
-              'thresholds': thresholds, 'oversampling': args.oversampling, model_size: model_size,
-              'batch_size': args.batch_size,
-              'lr_wd': lr_wd, 'epochs': args.epochs,
-              'wind_dir': args.wind_dir},
-            os.path.join(rundir,'hyperparams.pt'))
+torch.save( { 'hyperparams': hyperparams, 'scores': scores}, join(rundir,'run_info.pt'))
+
+
+
+
+
+    
+    

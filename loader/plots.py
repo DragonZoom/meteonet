@@ -90,7 +90,7 @@ def plot_inference(ds, date, model, thresholds, lon, lat, zone, title):
 
     plt.show()
 
-def plot_TPFPFN( dataset, date, model, thresholds, c):
+def plot_CT( dataset, date, model, thresholds, c):
     """
         for a given date in a dataset and a class c, plot prediction and ground-truth, true positives, false positives 
         and false negative
