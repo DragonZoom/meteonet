@@ -17,15 +17,15 @@
 :     utilities.py        # various functions
 :     meteonet.py         # the MeteonetDataset class
 :     samplers.py         # oversampling routines
-      filesets.py         # split meteonet files in train/val/test
-      plots.py            # plot functions
+:     filesets.py         # split meteonet files in train/val/test
+:     plots.py            # plot functions
 :  models/                # Currently only U-net to test training
 :  trainers/              # Currenlty, only classification
 :  train-Unet.py          # training routine for unet
 :  eval-Unet.py           # evaluation procedure
 :  test*.py               # various tests
-* Setup
- 
+
+* Setup 
   - requirements: pytorch, matplotlib, numpy, tqdm, tensorboard, pandas
   - Usage:
     1. download one of the two databases
