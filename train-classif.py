@@ -5,7 +5,7 @@
 import argparse, torch, os
 from platform import processor # for M1/M2 support
 
-parser = argparse.ArgumentParser( prog='train-Unet', description='Traning a UNet for Meteonet nowforecast')
+parser = argparse.ArgumentParser( prog='train-class', description='Traning a UNet for Meteonet nowcast and for 3 classes of precipitations')
 
 parser.add_argument( '-dd', '--data-dir', type=str, help='Directory containing data', dest='data_dir', default='data')
 parser.add_argument( '-wd', '--wind-dir', type=str, help='Directory containing the wind data', dest='wind_dir', default=None)
@@ -119,7 +119,7 @@ else:
 #try:
 
 rundir = join(args.run_dir,f'{datetime.now()}')
-print(f'run files will be recorded in direction {rundir}')
+print(f'run files will be recorded in directory {rundir}')
 os.system(f'mkdir -p "{rundir}"')
 scores = train_meteonet_classif( train_loader, val_loader, model, thresholds, args.epochs, lr_wd, args.snapshot_step, rundir=rundir, device = device)
 
