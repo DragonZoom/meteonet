@@ -14,7 +14,7 @@ else:
     print('No dataset found. Please download one with download-meteonet-*.sh scripts.')
     exit(1)
 
-#os.system('rm -f data/{train,val,test}.npz')
+os.system('rm -f data/{train,val,test}.npz')
 
 train, val, test = bouget21( 'data/rainmaps')
 ds = MeteonetDataset( train, 12, 18, 12, cached='data/train.npz', wind_dir='data/windmaps', tqdm=tqdm)

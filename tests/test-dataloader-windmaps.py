@@ -11,7 +11,7 @@ if isfile('data/.reduced_dataset'):
 elif isfile('data/.full_dataset'):
     print('full dataset')
 else:
-    print('No dataset found. Please download one with download-meteonet-*.sh scripts.')
+    print('No dataset found. Please download one with download-meteonet.sh script.')
     exit(1)
 
 files = glob( "data/rainmaps/y201[67]-*.npz")

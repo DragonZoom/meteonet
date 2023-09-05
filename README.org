@@ -10,9 +10,7 @@
 
 * Structure of this repository 
 
-:  download-meteonet.sh   # script that downloads meteonet dataset (11 Gb)
-:  download-meteonet-reduced.sh  # download a small meteonet dataset (1.8 Gb)
-:  data/                  # meteonet dataset, downloaded by previous scripts
+:  download-meteonet.sh   # script that downloads meteonet dataset
 :  loader/                # torch dataloader functions
 :     utilities.py        # various functions
 :     meteonet.py         # the MeteonetDataset class
@@ -23,12 +21,13 @@
 :  trainers/              # Currenlty, only classification
 :  train-Unet.py          # training routine for unet
 :  eval-Unet.py           # evaluation procedure
-:  test*.py               # various tests
+:  tests/*.py             # various unity tests
 
 * Setup 
   - requirements: pytorch, matplotlib, numpy, tqdm, tensorboard, pandas
   - Usage:
-    1. download one of the two databases
+    1. download one of the two datasetss:
+       : % ./download-meteonet.sh
     2. run =train-Unet.py=
        : % python train-Unet -h   # for usage
        : % python train-Unet      # start a training only on rainmaps with a correct hyperparameters setup
