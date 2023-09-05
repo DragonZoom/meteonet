@@ -13,7 +13,7 @@ parser.add_argument( '-t', '--thresholds', type=float, nargs='+', help='Rainmap 
 parser.add_argument( '-Rd', '--run-dir', type=str, help='Directory to save logs and checkpoints', dest='run_dir', default="runs")
 parser.add_argument( '-e', '--epochs', type=int,help='Number of epochs', dest='epochs', default=20)
 parser.add_argument( '-b', '--batch-size', type=int, help='Batch size', dest='batch_size', default=128)
-parser.add_argument( '-lr', '--learning-rate', type=float, nargs='+', help='LR_WD format is: epoch:Learning rate, weight decay', dest='lr_wd', default=['0:8e-4,1e-5', '4:1e-4,5e-5'])
+parser.add_argument( '-lr', '--learning-rate', type=str, nargs='+', help='LR_WD format is: epoch:Learning rate, weight decay', dest='lr_wd', default=['0:8e-4,1e-5', '4:1e-4,5e-5'])
 parser.add_argument( '-nw', '--num-workers', type=int,  help='Numbers of workers for Cuda', dest='num_workers', default = 8 if processor() != 'arm' else 0 ) # no multithreadings on M1/M2 :(
 parser.add_argument( '-o', '--oversampling', type=float, help='Oversampling percentage of last class', dest='oversampling', default=0.9)
 parser.add_argument( '-ss', '--snapshot-step', type=int, help='', dest='snapshot_step', default=5)
