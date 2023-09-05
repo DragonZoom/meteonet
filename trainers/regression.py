@@ -10,19 +10,29 @@ from loader.utilities import calculate_CT, calculate_BS, map_to_classes
 from tqdm import tqdm
 from os.path import join
 
-def train_meteonet_classif( train_loader, val_loader, model, thresholds, epochs, lr_wd,
-                            snapshot_step = 5, rundir='runs', clip_grad=0.1, tqdm=tqdm, device='cpu'):
+def train_meteonet_regression( train_loader, val_loader, model, thresholds, epochs, lr_wd,
+                               snapshot_step = 5, rundir='runs', clip_grad=0.1, tqdm=tqdm, device='cpu'):
 
     print('Evaluation Persistence...')
+    # on garde les métriques ensemblistes.
+    # il faut ajouter la RMSE
     CT_pers = 0
+    RMSE_pers = 0
+    N = 0
     for batch in tqdm(val_loader):
-        CT_pers += calculate_CT( map_to_classes(batch['persistence'], thresholds),
-                                 map_to_classes(batch['target'], thresholds))
+        persistance = batch['persistence']
+        target = batch['target']
+        CT_pers += calculate_CT( map_to_classes(persistance, thresholds),
+                                 map_to_classes(target, thresholds))
         f1_pers, bias_pers, ts_pers = calculate_BS( CT_pers, ['F1','BIAS','TS'])
+        RMSE_pers += ((persistance-target)**2).mean()
+        N += target.shape[0]
 
+    RMSE_pers = (RMSE_pers/N)*0.5
+    
     writer = SummaryWriter(log_dir=rundir)
 
-    loss = nn.BCEWithLogitsLoss()
+    loss = nn.MSELoss()
     loss.to(device)
     model.to(device)
     
@@ -40,10 +50,10 @@ def train_meteonet_classif( train_loader, val_loader, model, thresholds, epochs,
         train_loss = 0
         N = 0
         for batch in tqdm(train_loader, unit=' batches'):
-            x,y = batch['inputs'], map_to_classes( batch['target'], thresholds)
+            x,y = batch['inputs'], batch['target']
             x,y = x.to(device), y.to(device)
 
-            y_hat = model(x)
+            y_hat = model(x).squeeze(1)
             l = loss(y_hat, y)
             train_loss += l.item()
 
@@ -61,19 +71,23 @@ def train_meteonet_classif( train_loader, val_loader, model, thresholds, epochs,
         model.eval()
         val_loss = 0
         CT_pred = 0
+        RMSE_pred = 0
         N = 0
         for batch in tqdm(val_loader, unit=' batches'):
-            x,y = batch['inputs'], map_to_classes( batch['target'], thresholds)
+            x,y = batch['inputs'], batch['target']
             x,y = x.to(device), y.to(device)
             with torch.no_grad():
-                y_hat = model(x)
+                y_hat = model(x).squeeze(1)
             l = loss(y_hat, y)
             val_loss += l.item()
-            CT_pred += calculate_CT(torch.sigmoid(y_hat)>.5, y)
+            CT_pred += calculate_CT(map_to_classes(y_hat, thresholds), map_to_classes(y, thresholds))
+            RMSE_pred += ((y-y_hat)**2).mean()
             N += x.shape[0]
     
         f1_pred, bias, ts =  calculate_BS( CT_pred, ['F1','BIAS','TS'])
-            
+
+        RMSE_pred = ((RMSE_pred)/N)*0.5
+        
         val_loss /= N
         val_losses.append(val_loss)
         
@@ -97,8 +111,8 @@ def train_meteonet_classif( train_loader, val_loader, model, thresholds, epochs,
     torch.save(model.state_dict(), join(rundir, "model_last_epoch.pt"))
 
     return {'train_losses': train_losses, 'val_losses': val_losses,
-            'val_f1': val_f1, 'f1_pers': f1_pers ,
-            'val_bias': val_bias, 'bias_pers': bias_pers,
-            'val_ts': val_ts, 'ts_pers': ts_pers
+            'val_f1': val_f1,      'f1_pers': f1_pers ,
+            'val_bias': val_bias,  'bias_pers': bias_pers,
+            'val_ts': val_ts,      'ts_pers': ts_pers,
+            'val_rmse': RMSE_pred, 'RMSE_pers': RSME_pers
             }
-

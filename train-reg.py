@@ -5,12 +5,12 @@
 import argparse, torch, os
 from platform import processor # for M1/M2 support
 
-parser = argparse.ArgumentParser( prog='train-Unet', description='Traning a UNet for Meteonet nowforecast')
+parser = argparse.ArgumentParser( prog='train-reg', description='Traning a UNet for Meteonet nowforecast')
 
 parser.add_argument( '-dd', '--data-dir', type=str, help='Directory containing data', dest='data_dir', default='data')
 parser.add_argument( '-wd', '--wind-dir', type=str, help='Directory containing the wind data', dest='wind_dir', default=None)
 parser.add_argument( '-t', '--thresholds', type=float, nargs='+', help='Rainmap thresholds in mm/h (used by binary metrics)', dest='thresholds', default=[0.1,1,2.5])
-parser.add_argument( '-m', '--model', type=str, help='Model to train', dest='model', default='Unet-reg.py') 
+parser.add_argument( '-m', '--model', type=str, help='Model to train', dest='model', default='Unet.py') 
 parser.add_argument( '-Rd', '--run-dir', type=str, help='Directory to save logs and checkpoints', dest='run_dir', default="runs")
 parser.add_argument( '-e', '--epochs', type=int,help='Number of epochs', dest='epochs', default=20)
 parser.add_argument( '-b', '--batch-size', type=int, help='Batch size', dest='batch_size', default=128)
@@ -109,20 +109,20 @@ size of  files/items/batch
 
 ## Model & training procedure
 from models.unet import UNet
-from trainers.classif import train_meteonet_classif
+from trainers.regression import train_meteonet_regression
 from datetime import datetime
 
 if args.wind_dir:
-    model = UNet(n_channels = input_len*3, n_classes = len(thresholds), bilinear = True)
+    model = UNet(n_channels = input_len*3, n_classes = 1, bilinear = True)
 else:
-    model = UNet(n_channels = input_len, n_classes = len(thresholds), bilinear = True)
+    model = UNet(n_channels = input_len, n_classes = 1, bilinear = True)
     
 #try:
 
 rundir = join(args.run_dir,f'{datetime.now()}')
-print(f'run files will be recorded in direction {rundir}')
+print(f'run files will be recorded in directory {rundir}')
 os.system(f'mkdir -p "{rundir}"')
-scores = train_meteonet_classif( train_loader, val_loader, model, thresholds, args.epochs, lr_wd, args.snapshot_step, rundir=rundir, device = device)
+scores = train_meteonet_regression( train_loader, val_loader, model, thresholds, args.epochs, lr_wd, args.snapshot_step, rundir=rundir, device = device)
 
 hyperparams = { 'input_len': input_len,
                 'time_horizon': time_horizon,
