@@ -53,7 +53,7 @@ Data params:
    {input_len = } (history of {12*5} minutes)
    {time_horizon = } (nowcasting at {time_horizon*5} minutes)
    {stride = }
-   model = Unet classif
+   model = Unet regression
    model_size = ?
    {args.data_dir = }
    {args.wind_dir = }

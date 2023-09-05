@@ -103,6 +103,7 @@ def train_meteonet_regression( train_loader, val_loader, model, thresholds, epoc
             writer.add_scalar(f'F1_C{c+1}', f1_pred[c], epoch)
             writer.add_scalar(f'TS_C{c+1}', ts[c], epoch)
             writer.add_scalar(f'BIAS_C{c+1}', bias[c], epoch)
+            writer.add_scalar('RMSE', RMSE_pred, epoch)
     
         if epoch % snapshot_step == snapshot_step-1:
             torch.save(model.state_dict(), join(rundir, f'model_epoch_{epoch}.pt'))
@@ -114,5 +115,5 @@ def train_meteonet_regression( train_loader, val_loader, model, thresholds, epoc
             'val_f1': val_f1,      'f1_pers': f1_pers ,
             'val_bias': val_bias,  'bias_pers': bias_pers,
             'val_ts': val_ts,      'ts_pers': ts_pers,
-            'val_rmse': RMSE_pred, 'RMSE_pers': RSME_pers
+            'val_rmse': RMSE_pred, 'RMSE_pers': RMSE_pers
             }
