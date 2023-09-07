@@ -18,9 +18,9 @@
 :     filesets.py         # split meteonet files in train/val/test
 :     plots.py            # plot functions
 :  models/                # Currently only U-net to test training
-:  trainers/              # Currenlty, only classification
-:  train-Unet.py          # training routine for unet
-:  eval-Unet.py           # evaluation procedure
+:  trainers/              # One routine for classif and one for regression 
+:  train-classif.py       # training routine for unet
+:  eval-classif.py        # evaluation procedure
 :  tests/*.py             # various unity tests
 
 * Setup 
