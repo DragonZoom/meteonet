@@ -18,9 +18,9 @@
 :     filesets.py         # split meteonet files in train/val/test
 :     plots.py            # plot functions
 :  models/                # Currently only U-net to test training
-:  trainers/              # One routine for classif and one for regression 
-:  train-classif.py       # training routine for unet
-:  eval-classif.py        # evaluation procedure
+:  trainers/              # Subroutines for training
+:  train-*.py             # training procedures
+:  eval-*.py              # evaluation procedures
 :  tests/*.py             # various unity tests
 
 * Setup 
@@ -28,7 +28,7 @@
   - Usage:
     1. download one of the two datasetss:
        : % ./download-meteonet.sh
-    2. run =train-Unet.py=
+    2. run =train-classif.py=
        : % python train-* -h   # for usage *=classification or regression
        : % python train-*      # start a training only on rainmaps with a correct hyperparameters setup
        : % python eval-classif # evaluation of last run on the test sets
