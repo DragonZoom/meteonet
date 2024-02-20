@@ -2,11 +2,11 @@
 
 import torch, pandas as pd
 from tqdm import tqdm
-from loader.meteonet import MeteonetDataset
-from loader.samplers import meteonet_sequential_sampler
+from meteonet.loader import MeteonetDataset
+from meteonet.samplers import meteonet_sequential_sampler
 from torch.utils.data import DataLoader
-from loader.filesets import bouget21
-from loader.utilities import map_to_classes, calculate_CT, calculate_BS
+from meteonet.filesets import bouget21
+from meteonet.utilities import map_to_classes, calculate_CT, calculate_BS
 from platform import processor, system as sysname
 import os, argparse
 

@@ -1,8 +1,8 @@
 # plot meteonet rainmaps (todo: scores and inference)
 
-from loader.meteonet import MeteonetDataset
-from loader.plots import plot_meteonet_rainmaps
-from loader.filesets import bouget21
+from meteonet.loader import MeteonetDataset
+from meteonet.plots import plot_meteonet_rainmaps
+from meteonet.filesets import bouget21
 
 import numpy as np
 from os.path import isfile
@@ -27,6 +27,6 @@ lat = coord['lats'][lat_extract_start:lat_extract_end, lon_extract_start:lon_ext
 val_ds = MeteonetDataset( val_files, 12, 18, 12, wind_dir='data/windmaps', cached='data/val.npz', tqdm=tqdm)
 val_date = 2018,3,12,3,5
 
-plot_meteonet_rainmaps( val_ds, val_date, lon, lat, zone,'Rainmaps with Meteonet style')
+plot_meteonet_rainmaps( val_ds, val_date, lon, lat, zone, 'Rainmaps with Meteonet style')
 
 

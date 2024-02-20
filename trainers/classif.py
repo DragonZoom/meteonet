@@ -5,7 +5,7 @@ import torch.nn as nn
 from torch.optim import Adam
 from torch.utils.tensorboard import SummaryWriter
 
-from loader.utilities import calculate_CT, calculate_BS, map_to_classes
+from meteonet.utilities import calculate_CT, calculate_BS, map_to_classes
 
 from tqdm import tqdm
 from os.path import join

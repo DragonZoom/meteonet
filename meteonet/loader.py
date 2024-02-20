@@ -4,7 +4,7 @@
 import torch
 import numpy as np
 from torch.utils.data import Dataset
-from loader.utilities import next_date, load_map, map_to_classes, split_date
+from meteonet.utilities import next_date, load_map, map_to_classes, split_date
 from os.path import dirname, basename, join, isfile
 import time
 

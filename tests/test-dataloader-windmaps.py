@@ -1,5 +1,5 @@
-from loader.meteonet import MeteonetDataset
-from loader.samplers import meteonet_sequential_sampler
+from meteonet.loader import MeteonetDataset
+from meteonet.samplers import meteonet_sequential_sampler
 from tqdm import tqdm
 from glob import glob
 from os.path import isfile

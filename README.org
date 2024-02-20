@@ -11,9 +11,9 @@
 * Structure of this repository 
 
 :  download-meteonet.sh   # script that downloads meteonet dataset
-:  loader/                # torch dataloader functions
+:  meteonet/              # torch meteonet functions
 :     utilities.py        # various functions
-:     meteonet.py         # the MeteonetDataset class
+:     loader.py           # the data loader (MeteonetDataset class)
 :     samplers.py         # oversampling routines
 :     filesets.py         # split meteonet files in train/val/test
 :     plots.py            # plot functions

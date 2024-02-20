@@ -1,5 +1,5 @@
 from glob import glob
-from loader.utilities import split_date
+from meteonet.utilities import split_date
 from datetime import datetime
 from os.path import join
 

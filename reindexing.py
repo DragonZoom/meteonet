@@ -1,10 +1,10 @@
 # This script forces reindexing databases
 
 from glob import glob
-from loader.meteonet import MeteonetDataset
+from meteonet.loader import MeteonetDataset
 from tqdm import tqdm
 import os
-from loader.filesets import bouget21
+from meteonet.filesets import bouget21
 
 if os.path.isfile('data/.reduced_dataset'):
     print('Indexing reduced dataset, please wait...')

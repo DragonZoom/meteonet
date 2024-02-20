@@ -1,10 +1,10 @@
 # Test inference
 
 from glob import glob
-from loader.meteonet import MeteonetDataset
+from meteonet.loader import MeteonetDataset
 from pred_example.constants import *
-from loader.plots import plot_meteonet_rainmaps, plot_inference, plot_CT
-from loader.utilities import map_to_classes
+from meteonet.plots import plot_meteonet_rainmaps, plot_inference, plot_CT
+from meteonet.utilities import map_to_classes
 from models.unet import UNet
 import torch
 

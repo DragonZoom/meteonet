@@ -74,9 +74,9 @@ Others params:
 
 device = torch.device(device)
 
-from loader.filesets import bouget21
-from loader.meteonet import MeteonetDataset
-from loader.samplers import meteonet_random_oversampler, meteonet_sequential_sampler
+from meteonet.filesets import bouget21
+from meteonet.loader import MeteonetDataset
+from meteonet.samplers import meteonet_random_oversampler, meteonet_sequential_sampler
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from os.path import join

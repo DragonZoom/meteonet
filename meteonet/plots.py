@@ -2,7 +2,7 @@
 
 import matplotlib.pyplot as plt
 from matplotlib import colors
-from loader.utilities import get_item_by_date, load_map, split_date, map_to_classes
+from meteonet.utilities import get_item_by_date, load_map, split_date, map_to_classes
 import torch
 
 # autre colormap pluie: https://unidata.github.io/python-gallery/examples/Precipitation_Map.html#sphx-glr-download-examples-precipitation-map-py
