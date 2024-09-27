@@ -1,0 +1,7 @@
+Papers to retreive:
+
+ - https://www.researchgate.net/publication/372258123_Rain_Radar_and_Meteorological_Parameters_Fusion_for_Precipitation_Nowcasting_Effect_Exploration_and_Lightweight_Model/references
+ - https://www.researchgate.net/publication/379064466_METEO-DLNet_Quantitative_Precipitation_Nowcasting_Net_Based_on_Meteorological_Features_and_Deep_Learning
+ - https://www.researchgate.net/publication/379056454_FsrGAN_A_Satellite_and_Radar-based_Fusion_Prediction_Network_for_Precipitation_Nowcasting
+ - https://www.researchgate.net/publication/380472641_Radar-Based_Precipitation_Nowcasting_Based_on_Improved_U-Net_Model
+
