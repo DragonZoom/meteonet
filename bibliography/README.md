@@ -1,3 +1,14 @@
+This repertories contains papers for state of the art, organized as follow:
+
+- `models/` various architectures for rain nowcasting using radar rainfall maps, sorted by years 
+- `metrics/` evaluation of models
+- `variational/` variational methods for rain nowcasting
+- `new/` list of recent papers to retrieve
+- `contrib/` some ideas for new proposals
+- `others/` other papers related to rainnow cast
+
+
+
 Models already implemented by a PRAT student
 - ConvLSTM, 2015
 - ConvGRU, 
