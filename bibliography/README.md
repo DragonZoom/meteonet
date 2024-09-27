@@ -9,7 +9,7 @@ This repertories contains papers for state of the art, organized as follow:
 
 
 
-Models already implemented by a PRAT student
+Models already implemented by PRAT students
 - ConvLSTM, 2015
 - ConvGRU, 
 - TrajGRU, 2017
@@ -18,4 +18,4 @@ Models already implemented by a PRAT student
 - ED-DRAP, 2022
 - AA-TransUnet; 2022
 - SRU, 2022
-- 
+
