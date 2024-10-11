@@ -11,7 +11,7 @@ Models already implemented by PRAT students
 - ConvLSTM, 2015
 - ConvGRU, 
 - TrajGRU, 2017
-- SamAt-Unet, 2022
+- SmaAt-Unet, 2021
 - Broad Unet, 2021
 - ED-DRAP, 2022
 - AA-TransUnet; 2022
