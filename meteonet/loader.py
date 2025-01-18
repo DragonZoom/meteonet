@@ -26,7 +26,7 @@ class MeteonetDataset(Dataset):
          les dates manquantes sont consultats dans la variable missing_date de la classe.
     """
     def __init__(self, rainmaps, input_len = 12, target_pos = 18, stride = 12,
-                 wind_dir=None, cached=None, tqdm=None, logging=False):
+                 wind_dir=None, cached=None, tqdm=None, logging=False, include_future_images=False):
         """
         files: list of file name paths (will be sorted),
 
@@ -51,6 +51,7 @@ class MeteonetDataset(Dataset):
             params = obj['arr_0'].reshape(-1)[0]
             if params['input_len'] == input_len and  params['stride'] == stride and \
                params['target_pos'] == target_pos and params['files'] == files and \
+               params['include_future_images'] == include_future_images and \
                (wind_dir == None or params['wind_dir'] == wind_dir):
                 recalculate = False
 
@@ -58,7 +59,7 @@ class MeteonetDataset(Dataset):
             if tqdm: print('parameters changed, or cached file not found: indexing dataset, please wait...')
             params = {'files': files,
                       'input_len': input_len, 'target_pos': target_pos, 'stride': stride,
-                      'wind_dir': wind_dir}
+                      'wind_dir': wind_dir, 'include_future_images': include_future_images}
             maxs = []
             Umean = Vmean = 0.
             Uvar = Vvar = 0.
@@ -112,17 +113,29 @@ class MeteonetDataset(Dataset):
 
                 # get the target date
                 pos = target_pos - input_len
+                future_dates = []
                 while pos:
                     curr_date = next_date(curr_date)
+                    future_dates.append(curr_date)
                     pos -= 1
-                target_file = join(dname, curr_date)
-
                 jend = min(j+target_pos, l)
-                if target_file in files[j:jend]:
-                    item.append( j+files[j:jend].index(target_file))
+                
+                if include_future_images:
+                    for fdata in future_dates:
+                        target_file = join(dname, fdata) 
+                        if target_file in files[j:jend]:
+                            item.append( j+files[j:jend].index(target_file))
+                        else:
+                            item.append(-1)
+                            missing_dates.append(basename(target_file))
                 else:
-                    item.append(-1)
-                    missing_dates.append(basename(target_file))
+                    target_file = join(dname, curr_date) 
+                    if target_file in files[j:jend]:
+                        item.append( j+files[j:jend].index(target_file))
+                    else:
+                        item.append(-1)
+                        missing_dates.append(basename(target_file))
+                
                 items.append(item)
 
             params['items'] = np.array(items)
@@ -167,6 +180,7 @@ class MeteonetDataset(Dataset):
 
     def __getitem__(self, i):
         item = self.params['items'][i]
+        input_len = self.params['input_len']
 
         # Anastase: 
         # on peut changer ça, notamment uniquement si la target vaut -1.
@@ -178,24 +192,34 @@ class MeteonetDataset(Dataset):
             return None
 
         maps, _ = self.read(item[0])
-        for idx in item[1:-1]:
+        for idx in item[1:input_len]:
             rmap, persistence = self.read(idx)
             maps = torch.cat((maps, rmap), dim=0)
         if self.use_wind:
-            if not self.params['has_wind'][item[:-1]].all():
+            if not self.params['has_wind'][item[:input_len]].all():
                 return None
             Umaps, Vmaps = self.read_wind(item[0])
-            for idx in item[1:-1]:                
+            for idx in item[1:input_len]:                
                 U,V = self.read_wind(idx)
                 Umaps = torch.cat((Umaps, U), dim=0)
                 Vmaps = torch.cat((Vmaps, V), dim=0)
             maps = torch.cat((maps, Umaps, Vmaps), dim=0)
         
-        target_file = self.params['files'][item[-1]]
+        if self.params['include_future_images'] and not self.do_not_read_map:
+            target_file = self.params['files'][item[-1]]
+            _, future_maps = self.read(item[input_len])
+            future_maps = future_maps.view(1, 128, 128)
+            for idx in item[input_len+1:]:
+                _, rmap = self.read(idx)
+                future_maps = torch.cat((future_maps, rmap.view(1, 128, 128)), dim=0)
+            target = future_maps
+        else:
+            target_file = self.params['files'][item[input_len]]
+            target = torch.Tensor(load_map(target_file)) if not self.do_not_read_map else torch.zeros(1)
         
         return {
             'inputs': maps,
-            'target': torch.Tensor(load_map(target_file)) if not self.do_not_read_map else torch.zeros(1),
+            'target': target,
             'target_name': target_file,
             'persistence': persistence
         }
