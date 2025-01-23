@@ -7,6 +7,12 @@ from torch.utils.data import Dataset
 from meteonet.utilities import next_date, load_map, map_to_classes, split_date
 from os.path import dirname, basename, join, isfile
 import time
+import logging
+
+logging.basicConfig(level=logging.ERROR)
+
+from tqdm import tqdm
+from datetime import datetime
 
 epsilon = 1e-3 # As Antonia
 
@@ -26,7 +32,7 @@ class MeteonetDataset(Dataset):
          les dates manquantes sont consultats dans la variable missing_date de la classe.
     """
     def __init__(self, rainmaps, input_len = 12, target_pos = 18, stride = 12,
-                 wind_dir=None, cached=None, tqdm=None, logging=False, include_future_images=False):
+                 wind_dir=None, cached=None, tqdm=None, logging=False):
         """
         files: list of file name paths (will be sorted),
 
@@ -51,7 +57,6 @@ class MeteonetDataset(Dataset):
             params = obj['arr_0'].reshape(-1)[0]
             if params['input_len'] == input_len and  params['stride'] == stride and \
                params['target_pos'] == target_pos and params['files'] == files and \
-               params['include_future_images'] == include_future_images and \
                (wind_dir == None or params['wind_dir'] == wind_dir):
                 recalculate = False
 
@@ -59,7 +64,7 @@ class MeteonetDataset(Dataset):
             if tqdm: print('parameters changed, or cached file not found: indexing dataset, please wait...')
             params = {'files': files,
                       'input_len': input_len, 'target_pos': target_pos, 'stride': stride,
-                      'wind_dir': wind_dir, 'include_future_images': include_future_images}
+                      'wind_dir': wind_dir}
             maxs = []
             Umean = Vmean = 0.
             Uvar = Vvar = 0.
@@ -113,29 +118,17 @@ class MeteonetDataset(Dataset):
 
                 # get the target date
                 pos = target_pos - input_len
-                future_dates = []
                 while pos:
                     curr_date = next_date(curr_date)
-                    future_dates.append(curr_date)
                     pos -= 1
+                target_file = join(dname, curr_date)
+
                 jend = min(j+target_pos, l)
-                
-                if include_future_images:
-                    for fdata in future_dates:
-                        target_file = join(dname, fdata) 
-                        if target_file in files[j:jend]:
-                            item.append( j+files[j:jend].index(target_file))
-                        else:
-                            item.append(-1)
-                            missing_dates.append(basename(target_file))
+                if target_file in files[j:jend]:
+                    item.append( j+files[j:jend].index(target_file))
                 else:
-                    target_file = join(dname, curr_date) 
-                    if target_file in files[j:jend]:
-                        item.append( j+files[j:jend].index(target_file))
-                    else:
-                        item.append(-1)
-                        missing_dates.append(basename(target_file))
-                
+                    item.append(-1)
+                    missing_dates.append(basename(target_file))
                 items.append(item)
 
             params['items'] = np.array(items)
@@ -180,7 +173,6 @@ class MeteonetDataset(Dataset):
 
     def __getitem__(self, i):
         item = self.params['items'][i]
-        input_len = self.params['input_len']
 
         # Anastase: 
         # on peut changer ça, notamment uniquement si la target vaut -1.
@@ -192,41 +184,255 @@ class MeteonetDataset(Dataset):
             return None
 
         maps, _ = self.read(item[0])
-        for idx in item[1:input_len]:
+        for idx in item[1:-1]:
             rmap, persistence = self.read(idx)
             maps = torch.cat((maps, rmap), dim=0)
         if self.use_wind:
-            if not self.params['has_wind'][item[:input_len]].all():
+            if not self.params['has_wind'][item[:-1]].all():
                 return None
             Umaps, Vmaps = self.read_wind(item[0])
-            for idx in item[1:input_len]:                
+            for idx in item[1:-1]:                
                 U,V = self.read_wind(idx)
                 Umaps = torch.cat((Umaps, U), dim=0)
                 Vmaps = torch.cat((Vmaps, V), dim=0)
             maps = torch.cat((maps, Umaps, Vmaps), dim=0)
         
-        if self.params['include_future_images'] and not self.do_not_read_map:
-            target_file = self.params['files'][item[-1]]
-            _, future_maps = self.read(item[input_len])
-            future_maps = future_maps.view(1, 128, 128)
-            for idx in item[input_len+1:]:
-                _, rmap = self.read(idx)
-                future_maps = torch.cat((future_maps, rmap.view(1, 128, 128)), dim=0)
-            target = future_maps
-        else:
-            target_file = self.params['files'][item[input_len]]
-            target = torch.Tensor(load_map(target_file)) if not self.do_not_read_map else torch.zeros(1)
+        target_file = self.params['files'][item[-1]]
         
         return {
             'inputs': maps,
-            'target': target,
+            'target': torch.Tensor(load_map(target_file)) if not self.do_not_read_map else torch.zeros(1),
             'target_name': target_file,
             'persistence': persistence
         }
 
+
+###############################################################################
+# Chunk loading
+###############################################################################
+def bouget21_chunked(samples_idx_s, data_type="train"):
+    """Split in train/validation/test sets according to Section 4.1 from Bouget et al, 2021"""
+    if data_type == "all":
+        return samples_idx_s
+    idx_s = []
+    for idx in samples_idx_s:
+        year, month, day, hour, mi, data_idx, channels = idx
+        yday = datetime(year, month, day).timetuple().tm_yday - 1
+        if data_type == "val" and year == 2018 and (yday // 7) % 2 == 0:
+            idx_s.append(idx)
+        elif (
+            data_type == "test"
+            and year == 2018
+            and not (yday % 7 == 0 and hour == 0)
+            and (yday // 7) % 2 != 0
+        ):
+            idx_s.append(idx)
+        elif data_type == "train" and (year == 2016 or year == 2017):
+            idx_s.append(idx)
+    return np.array(idx_s)
+
+
+class ChunksCache:
+    def __init__(self, root_dir: str, max_size=100):
+        self.root_dir = root_dir
+        self.max_size = max_size
+        self.loaded_chunks = {}
+        self.n_loaded = 0
+        self.n_missed = 0
+
+    def add_to_cache(self, y: int, M: int, d: int, chunk: np.array):
+        if len(self.loaded_chunks) >= self.max_size:
+            self.loaded_chunks.popitem()
+        self.loaded_chunks[(y, M, d)] = chunk
+
+    def load_chunk(self, y: int, M: int, d: int):
+        chunk_file = join(self.root_dir, "chunks", f"y{y:04d}", f"M{M:02d}", f"d{d:02d}", f"y{y:04d}-M{M:02d}-d{d:02d}.npy")
+        try:
+            return np.load(chunk_file, mmap_mode="r")
+        except Exception:
+            logging.error(f"Error loading {chunk_file}")
+            logging.error(f"Loaded chunks count: {len(self.loaded_chunks)}")
+            return None
+
+    def get_chunk(self, y: int, M: int, d: int):
+        self.n_loaded += 1
+        if (y, M, d) in self.loaded_chunks:
+            return self.loaded_chunks[(y, M, d)]
+        self.n_missed += 1
+        chunk = self.load_chunk(y, M, d)
+        self.add_to_cache(y, M, d, chunk)
+        return chunk
+
+    def get_sample(self, sample_idx):
+        chunk = self.get_chunk(*sample_idx[:3])
+        return chunk[sample_idx[-2]:sample_idx[-2] + sample_idx[-1]]
+
+
+class MeteonetDatasetChunked(Dataset):
+    """
+    A PyTorch Dataset class for loading and processing Meteonet data in chunks.
+
+    This class handles the loading of Meteonet data, computes necessary statistics,
+    and prepares the data for training and evaluation in a chunked manner.
+
+
+        norm_factors (list): Normalization factors computed from the data.
+
+    Methods:
+        _compute_maps_moments():
+            Computes the moments (mean, variance) and other statistics for the data maps.
+        
+        _compute_items():
+            Computes the items (sequences of indices) for the dataset based on the stride and target position.
+        
+        _sample_name(sample_idx):
+            Generates a sample name string from the sample index.
+        
+        __len__():
+            Returns the number of items in the dataset.
+        
+        _get_inputs(item):
+            Retrieves and processes the input maps for a given item.
+        
+        _get_targets(item):
+            Retrieves and processes the target maps for a given item.
+        
+        __getitem__(i):
+            Retrieves the inputs, targets, and other relevant data for a given index.
+    """
+    def __init__(self, root_dir: str, data_type: str, input_len=12, target_pos=18, stride=12, target_is_one_map=False):
+        """
+        Initializes the loader with the specified parameters.
+
+        Args:
+            root_dir (str): The root directory where the data is stored.
+            data_type (str): The type of data to be loaded.
+            input_len (int, optional): The length of the input sequence. Defaults to 12.
+            target_pos (int, optional): The position of the target in the sequence. Defaults to 18.
+            stride (int, optional): The stride length for sampling. Defaults to 12.
+            target_is_one_map (bool, optional): Flag indicating if the target is a single map. Defaults to False.
+
+        Attributes:
+            data_type (str): The type of data to be loaded.
+            root_dir (str): The root directory where the data is stored.
+            target_is_one_map (bool): Flag indicating if the target is a single map.
+            do_not_read_map (bool): Flag indicating if the map should not be read.
+            samples (list): The list of samples obtained from the index file.
+            loader (ChunksCache): The cache loader for chunks of data.
+            params (dict): Dictionary containing various parameters for data loading and processing.
+        """
+        self.data_type = data_type
+        self.root_dir = root_dir
+        self.target_is_one_map = target_is_one_map
+        self.do_not_read_map = False
+
+        idx_s_all = np.load(join(root_dir, "chunks", "indexs.npy"), mmap_mode="r")
+        self.samples = bouget21_chunked(idx_s_all, data_type)
+        self.loader = ChunksCache(root_dir)
+
+        self.params = {
+            "root_dir": root_dir,
+            "input_len": input_len,
+            "target_pos": target_pos,
+            "stride": stride,
+            "maxs": None,
+            "U_moments": None,
+            "V_moments": None,
+            "has_wind": None,
+            "items": None,
+            "missing_dates": None,
+        }
+        self._compute_maps_moments()
+        self._compute_items()
+
+    def _compute_maps_moments(self):
+        maxs, Umean, Vmean, Uvar, Vvar, size = [], 0.0, 0.0, 0.0, 0.0, 0.0
+        has_wind = []
+        for sample_idx in tqdm(self.samples, unit=" samples", desc="Computing moments"):
+            maps = self.loader.get_sample(sample_idx)
+            maxs.append(maps[0].max())
+            if maps.shape[0] == 3:
+                U, V = maps[1].astype(float), maps[2].astype(float)
+                Umean, Vmean = Umean + U.sum(), Vmean + V.sum()
+                Uvar, Vvar = Uvar + (U**2).sum(), Vvar + (V**2).sum()
+                size += U.size
+                has_wind.append(True)
+            else:
+                has_wind.append(False)
+        Umean, Vmean = Umean / size, Vmean / size
+        self.params.update({
+            "U_moments": (Umean, np.sqrt(Uvar / size - Umean**2)),
+            "V_moments": (Vmean, np.sqrt(Vvar / size - Vmean**2)),
+            "maxs": np.array(maxs),
+            "has_wind": np.array(has_wind),
+        })
+        self.norm_factors = [np.log(1 + self.params["maxs"].max())] + list(self.params["U_moments"]) + list(self.params["V_moments"])
+
+    def _compute_items(self):
+        missing_dates, items = [], []
+        l = len(self.samples)
+        for j in tqdm(range(0, l, self.params["stride"]), unit=" samples", desc="Computing items"):
+            item, curr_date = [j], self._sample_name(self.samples[j])
+            k, num_obs = j + 1, self.params["target_pos"] - 1
+            while num_obs and k < l:
+                next_aavailable_date = self._sample_name(self.samples[k])
+                curr_date = next_date(curr_date)
+                if curr_date == next_aavailable_date:
+                    item.append(k)
+                    k += 1
+                else:
+                    item.append(-1)
+                    missing_dates.append(curr_date)
+                num_obs -= 1
+            if k == l:
+                break
+            items.append(item)
+        self.params.update({"items": np.array(items), "missing_dates": missing_dates})
+
+    def _sample_name(self, sample_idx):
+        year, month, day, hour, mi, _, _ = sample_idx
+        return f"y{year}-M{month}-d{day}-h{hour}-m{mi}.npz"
+
+    def __len__(self):
+        return self.params["items"].shape[0]
+
+    def _get_inputs(self, item: np.array):
+        if self.do_not_read_map:
+            return np.zeros((1, 1))
+        input_maps = []
+        for idx in item[:self.params["input_len"]]:
+            cur_map = torch.Tensor(self.loader.get_sample(self.samples[idx]).copy())
+            cur_map[0] = torch.log(cur_map[0] + 1 + epsilon) / self.norm_factors[0]
+            cur_map[1] = (cur_map[1] - self.norm_factors[1]) / self.norm_factors[2]
+            cur_map[2] = (cur_map[2] - self.norm_factors[3]) / self.norm_factors[4]
+            input_maps.append(cur_map)
+        return torch.cat(input_maps, dim=0)
+
+    def _get_targets(self, item: np.array):
+        if self.do_not_read_map:
+            return np.zeros((1, 1))
+        if self.target_is_one_map:
+            return torch.Tensor(self.loader.get_sample(self.samples[item[-1]])[0].copy())
+        targets = [torch.Tensor(self.loader.get_sample(self.samples[idx])[0].copy()) for idx in item[self.params["input_len"] + 1:]]
+        return torch.cat(targets, dim=0)
+
+    def __getitem__(self, i: int):
+        item = self.params["items"][i]
+        if item.min() == -1 or not self.params["has_wind"][item[:self.params["input_len"]]].all():
+            return None
+        return {
+            "inputs": self._get_inputs(item),
+            "target": self._get_targets(item),
+            "persistance": torch.Tensor(self.loader.get_sample(self.samples[item[self.params["input_len"] - 1]])[0].copy()) if not self.do_not_read_map else np.zeros((1, 1)),
+            "target_name": self._sample_name(self.samples[item[-1]]),
+        }
+
+
+###############################################################################
+###############################################################################
 class MeteonetTime(Dataset):
-    """ A class to check the time cost of loading 200000 files, obsolet """
-    def __init__(self, files, load = False):
+    """A class to check the time cost of loading 200000 files, obsolet"""
+    def __init__(self, files, load=False):
         self.files = files
         self.load = load
     def __len__(self):
