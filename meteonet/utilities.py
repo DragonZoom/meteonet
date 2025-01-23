@@ -12,6 +12,9 @@ def split_date(filename):
 
 def load_map(npz):
     # ->Array[int16] 
+    # check .npz or .npy
+    if npz.endswith('.npy'):
+        return np.load(npz)
     return list(np.load(npz).values())[0]
 
 def map_to_classes( rainmap, thresholds):
