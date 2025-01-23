@@ -43,13 +43,13 @@ def next_date(filename, ext='npz'):
     else: minute += 5
     return f'y{year}-M{month}-d{day}-h{hour}-m{minute}.{ext}'
 
-def get_item_by_date(ds, date):
+def get_item_by_date(ds, date, ext='npz'):
     """ utility: returns the item in which date belongs to """
     files = ds.params['files']
     items = ds.params['items']
         
     y,M,d,h,m = date
-    f = f'{dirname(files[0])}/y{y}-M{M}-d{d}-h{h}-m{m}.npz'
+    f = f'{dirname(files[0])}/y{y}-M{M}-d{d}-h{h}-m{m}.{ext}'
     if not f in files:
         print('date not available')
         return None
