@@ -14,9 +14,9 @@ from os.path import join
 def separate_radar_wind(x):
     B, C, H, W = x.shape
     input_len = C // 3
-    radars = x[:, :12].view(B, input_len, 1, H, W)
-    u_maps = x[:, 12:24].view(B, input_len, 1, H, W)
-    v_maps = x[:, 24:].view(B, input_len, 1, H, W)
+    radars = x[:, : :3].view(B, input_len, 1, H, W)
+    u_maps = x[:, 1::3].view(B, input_len, 1, H, W)
+    v_maps = x[:, 2::3].view(B, input_len, 1, H, W)
     wind = torch.cat([u_maps, v_maps], dim=2)
     return radars, wind
 
@@ -94,7 +94,7 @@ def train_meteonet_gan(
     N = 0
     for batch in tqdm(val_loader):
         persistance = batch["persistence"]
-        target = batch["target"][:, -1]
+        target = batch["target"]
         
         CT_pers += calculate_CT(
             map_to_classes(persistance, thresholds), map_to_classes(target, thresholds)
@@ -228,7 +228,7 @@ def train_meteonet_gan(
         N = 0
         for batch in tqdm(val_loader, unit=" batches"):
             x, y = batch["inputs"], batch["target"]
-            x, y = x.to(device), y.to(device)[:, -1]
+            x, y = x.to(device), y.to(device)
             x_radar, x_wind = separate_radar_wind(x)
             with torch.no_grad():
                 y_hat = model_generator1(x_radar, x_wind)

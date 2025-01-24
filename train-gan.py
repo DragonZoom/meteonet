@@ -18,14 +18,6 @@ parser.add_argument(
     default="data",
 )
 parser.add_argument(
-    "-wd",
-    "--wind-dir",
-    type=str,
-    help="Directory containing the wind data",
-    dest="wind_dir",
-    default=None,
-)
-parser.add_argument(
     "-t",
     "--thresholds",
     type=float,
@@ -33,9 +25,6 @@ parser.add_argument(
     help="Rainmap thresholds in mm/h (used by binary metrics)",
     dest="thresholds",
     default=[0.1, 1, 2.5],
-)
-parser.add_argument(
-    "-m", "--model", type=str, help="Model to train", dest="model", default="Unet.py"
 )
 parser.add_argument(
     "-Rd",
@@ -80,6 +69,7 @@ parser.add_argument(
     "-ss", "--snapshot-step", type=int, help="", dest="snapshot_step", default=5
 )
 parser.add_argument("-db", "--debug", type=bool, help="", dest="debug", default=False)
+parser.add_argument("-lt", "--light", type=bool, help="", dest="light", default=False)
 
 # parser.add_argument('-f', '--load', dest='load', type=str, default=False, help='Load model from a .pth file')
 # parser.add_argument( '-gs', '--global-step-start', metavar='gstp', type=int, default=0,
@@ -121,7 +111,6 @@ Data params:
    model = FsrGAN regression
    model_size = ?
    {args.data_dir = }
-   {args.wind_dir = }
    {len(thresholds)} classes ({thresholds=})
    
 Train params:
@@ -141,57 +130,29 @@ Others params:
 
 device = torch.device(device)
 
-from meteonet.filesets import bouget21
-from meteonet.loader import MeteonetDataset
+from meteonet.loader import MeteonetDatasetChunked
 from meteonet.samplers import meteonet_random_oversampler, meteonet_sequential_sampler
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 from os.path import join
 
-# split in validation/test sets according to Section 4.1 from [1]
-cache_file = join(args.data_dir, "file_cache.pt")
-if os.path.exists(cache_file):
-    print(f"Loading cached file list from {cache_file}")
-    cache = torch.load(cache_file)
-    train_files, val_files = cache["train_files"], cache["val_files"]
-else:
-    train_files, val_files, _ = bouget21(join(args.data_dir, "rainmaps"))
-    print(f"Caching file list to {cache_file}")
-    torch.save({"train_files": train_files, "val_files": val_files}, cache_file)
 
-# limit the number of files for testing
-if args.debug:
-    train_files = train_files[:2560]
-    val_files = val_files[:1280]
-
-# print files count
-print(f"train files: {len(train_files)}")
-print(f"val files: {len(val_files)}")
-
-# datasets
-postfix = "-gan-inf" if not args.debug else "-gan-debug"
-indexes = [join(args.data_dir, f"train{postfix}.npz"), join(args.data_dir, f"val{postfix}.npz")]
-
-train_ds = MeteonetDataset(
-    train_files,
+train_ds = MeteonetDatasetChunked(
+    args.data_dir,
+    'train' if not args.debug else 'test', # limit the number of files for testing
     input_len,
     input_len + time_horizon,
     stride,
-    wind_dir=args.wind_dir,
-    cached=indexes[0],
-    tqdm=tqdm,
-    include_future_images=True
+    target_is_one_map=False,
 )
-val_ds = MeteonetDataset(
-    val_files,
+val_ds = MeteonetDatasetChunked(
+    args.data_dir,
+    "val",
     input_len,
     input_len + time_horizon,
     stride,
-    wind_dir=args.wind_dir,
-    cached=indexes[1],
-    tqdm=tqdm,
-    include_future_images=True
+    target_is_one_map=True,
 )
+
 val_ds.norm_factors = train_ds.norm_factors
 
 # samplers for dataloaders
@@ -217,25 +178,30 @@ val_loader = DataLoader(
 
 print(
     f"""
-size of train files/items/batch
-     {len(train_files)} {len(train_ds)} {len(train_loader)}
-size of  files/items/batch
-     {len(val_files)} {len(val_ds)} {len(val_loader)}
+size of train items/batch
+      {len(train_ds)} {len(train_loader)}
+size of val items/batch
+      {len(val_ds)} {len(val_loader)}
 """
 )
 
 
 ## Model & training procedure
-from models.FsrGAN import FirstStage, FsrSecondStageGenerator, FsrDiscriminator
+from models.FsrGAN import (
+    FirstStage,
+    FsrSecondStageGenerator,
+    FsrDiscriminator,
+    FsrSecondStageGeneratorLight,
+)
 from trainers.gan import train_meteonet_gan
 from datetime import datetime
 
-if args.wind_dir:
-    model1_g = FirstStage(input_len, time_horizon)
-    model2_g = FsrSecondStageGenerator(input_len, time_horizon)
-    model_d = FsrDiscriminator(time_horizon)
+model1_g = FirstStage(input_len, time_horizon)
+if args.light:
+    model2_g = FsrSecondStageGeneratorLight(input_len, time_horizon)
 else:
-    raise ValueError("Expected wind maps")
+    model2_g = FsrSecondStageGenerator(input_len, time_horizon)
+model_d = FsrDiscriminator(time_horizon)
 
 # try:
 
@@ -250,7 +216,7 @@ scores = train_meteonet_gan(
     model_d,
     thresholds,
     args.epochs,
-    lr_wd, # TODO: lr_wd_g1, lr_wd_g2, lr_wd_d
+    lr_wd,  # TODO: lr_wd_g1, lr_wd_g2, lr_wd_d
     lr_wd,
     lr_wd,
     args.snapshot_step,
@@ -270,18 +236,9 @@ hyperparams = {
     "oversampling": args.oversampling,
     # 'model_size': model_size,
     "data_dir": args.data_dir,
-    "dataset_indexes": indexes,
-    "wind_dir": args.wind_dir,
 }
 
 os.system(f'rm -f lastrun; ln -sf "{rundir}" lastrun')
-
-# except KeyboardInterrupt:     # suspend
-#        try:
-#            sys.exit(0)
-#        except SystemExit:
-#            os._exit(0)
-
 
 import torch
 
