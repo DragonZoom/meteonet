@@ -425,8 +425,8 @@ class MeteonetDatasetChunked(Dataset):
             return np.zeros((1, 1))
         if self.target_is_one_map:
             return torch.Tensor(self.loader.get_sample(self.samples[item[-1]])[0].copy())
-        targets = [torch.Tensor(self.loader.get_sample(self.samples[idx])[0].copy()) for idx in item[self.params["input_len"] + 1:]]
-        return torch.cat(targets, dim=0)
+        targets = [torch.Tensor(self.loader.get_sample(self.samples[idx])[0].copy()) for idx in item[self.params["input_len"]:]]
+        return torch.stack(targets, dim=0)
 
     def __getitem__(self, i: int):
         item = self.params["items"][i]
@@ -435,7 +435,7 @@ class MeteonetDatasetChunked(Dataset):
         return {
             "inputs": self._get_inputs(item),
             "target": self._get_targets(item),
-            "persistance": torch.Tensor(self.loader.get_sample(self.samples[item[self.params["input_len"] - 1]])[0].copy()) if not self.do_not_read_map else np.zeros((1, 1)),
+            "persistence": torch.Tensor(self.loader.get_sample(self.samples[item[self.params["input_len"] - 1]])[0].copy()) if not self.do_not_read_map else np.zeros((1, 1)),
             "target_name": self._sample_name(self.samples[item[-1]]),
         }
 
