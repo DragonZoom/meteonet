@@ -1,15 +1,13 @@
 import os
 import numpy as np
-import shutil
 from glob import glob
 from os.path import join
 import argparse
 from tqdm import tqdm
 
-from meteonet.utilities import next_date, load_map, map_to_classes, split_date
-from meteonet.filesets import bouget21_merged
+from meteonet.utilities import split_date
 
-def main(rainmaps_dir, dest_folder):
+def main(rainmaps_dir, dest_folder, compress):
     ###############################################################################
     # collect all rainmaps
     all_files = glob(join(rainmaps_dir, '*.npz'))
@@ -57,8 +55,13 @@ def main(rainmaps_dir, dest_folder):
             cur_idx += cur_map.shape[0]
         arr_s = np.concatenate(arr_s, axis=0)
         # save
-        arr_s_file = join(dst_folder, f"y{y:04d}-M{m:02d}-d{d:02d}.npy")
-        np.save(arr_s_file, arr_s)
+        arr_file_name = f"y{y:04d}-M{m:02d}-d{d:02d}"
+        if compress:
+            arr_s_file = join(dst_folder, f"{arr_file_name}.npz")
+            np.savez_compressed(arr_s_file, arr_s)
+        else:
+            arr_s_file = join(dst_folder, f"{arr_file_name}.npy")
+            np.save(arr_s_file, arr_s)
 
     idx_s = np.array(idx_s, dtype=np.int16)
     np.save(join(dest_folder, "chunks", "indexs.npy"), idx_s)
@@ -69,5 +72,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process rainmaps and create chunks.')
     parser.add_argument('--rainmaps_dir', type=str, default='data/rainmaps', help='Directory containing rainmaps')
     parser.add_argument('--dest_folder', type=str, default='data-chunked', help='Destination folder for chunks')
+    parser.add_argument('--compress', type=bool, default=True, help='Compress chunks to .npz')
     args = parser.parse_args()
-    main(args.rainmaps_dir, args.dest_folder)
+    main(args.rainmaps_dir, args.dest_folder, args.compress)

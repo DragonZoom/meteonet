@@ -233,10 +233,11 @@ def bouget21_chunked(samples_idx_s, data_type="train"):
 
 
 class ChunksCache:
-    def __init__(self, root_dir: str, max_size=100):
+    def __init__(self, root_dir: str, max_size=100, compressed=False):
         self.root_dir = root_dir
         self.max_size = max_size
         self.loaded_chunks = {}
+        self.compressed = compressed
         self.n_loaded = 0
         self.n_missed = 0
 
@@ -246,9 +247,11 @@ class ChunksCache:
         self.loaded_chunks[(y, M, d)] = chunk
 
     def load_chunk(self, y: int, M: int, d: int):
-        chunk_file = join(self.root_dir, "chunks", f"y{y:04d}", f"M{M:02d}", f"d{d:02d}", f"y{y:04d}-M{M:02d}-d{d:02d}.npy")
+        ext = 'npz' if self.compressed else 'npy'
+        chunk_file = join(self.root_dir, "chunks", f"y{y:04d}", f"M{M:02d}", f"d{d:02d}", f"y{y:04d}-M{M:02d}-d{d:02d}.{ext}")
         try:
-            return np.load(chunk_file, mmap_mode="r")
+            data = np.load(chunk_file, mmap_mode="r")
+            return data['arr_0'] if self.compressed else data
         except Exception:
             logging.error(f"Error loading {chunk_file}")
             logging.error(f"Loaded chunks count: {len(self.loaded_chunks)}")
@@ -300,7 +303,7 @@ class MeteonetDatasetChunked(Dataset):
         __getitem__(i):
             Retrieves the inputs, targets, and other relevant data for a given index.
     """
-    def __init__(self, root_dir: str, data_type: str, input_len=12, target_pos=18, stride=12, target_is_one_map=False):
+    def __init__(self, root_dir: str, data_type: str, input_len=12, target_pos=18, stride=12, target_is_one_map=False, compressed=False):
         """
         Initializes the loader with the specified parameters.
 
@@ -328,7 +331,7 @@ class MeteonetDatasetChunked(Dataset):
 
         idx_s_all = np.load(join(root_dir, "chunks", "indexs.npy"), mmap_mode="r")
         self.samples = bouget21_chunked(idx_s_all, data_type)
-        self.loader = ChunksCache(root_dir)
+        self.loader = ChunksCache(root_dir, compressed=compressed)
 
         self.params = {
             "root_dir": root_dir,

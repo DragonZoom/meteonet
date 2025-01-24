@@ -6,15 +6,15 @@ from os.path import isfile, isdir
 from torch.utils.data import DataLoader
 from platform import processor # for M1/M2 support
 
-
-data_folder = 'data-chunked'
+COMPRESSED = False
+data_folder = f'data-chunked{'-z' if COMPRESSED else ''}'
 if isdir(data_folder):
     print('reduced dataset')
 else:
     print('No dataset found. Please run script-data-chunked.py first')
     exit(1)
 
-train = MeteonetDatasetChunked( data_folder, 'train', 12, 18, 12, target_is_one_map=False) 
+train = MeteonetDatasetChunked( data_folder, 'train', 12, 18, 12, target_is_one_map=False, compressed=COMPRESSED) 
 print(f"found {len(train.params['missing_dates'])} missing dates")
 
 print("Time to iterate the dataset ...")
