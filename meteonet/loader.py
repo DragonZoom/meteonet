@@ -342,8 +342,20 @@ class MeteonetDatasetChunked(Dataset):
             "items": None,
             "missing_dates": None,
         }
-        self._compute_maps_moments()
-        self._compute_items()
+        
+        cache_file = join(root_dir, f"moments_{data_type}.npz")
+        if isfile(cache_file):
+            print(f"Loading cached moments for {data_type} data from {cache_file}")
+            cached_params = np.load(cache_file, allow_pickle=True)
+            self.params.update(cached_params['arr_0'].item())
+            self.norm_factors = [np.log(1 + self.params["maxs"].max())] + list(self.params["U_moments"]) + list(self.params["V_moments"])
+        else:
+            self._compute_maps_moments()
+            self._compute_items()
+            # save only the computed parameters to a cache file
+            to_save_keys = ["maxs", "U_moments", "V_moments", "has_wind", "items", "missing_dates"]
+            to_save = {k: v for k, v in self.params.items() if k in to_save_keys}
+            np.savez_compressed(cache_file, to_save)
 
     def _compute_maps_moments(self):
         maxs, Umean, Vmean, Uvar, Vvar, size = [], 0.0, 0.0, 0.0, 0.0, 0.0
