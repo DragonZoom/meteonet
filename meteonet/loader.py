@@ -266,9 +266,11 @@ class ChunksCache:
         self.add_to_cache(y, M, d, chunk)
         return chunk
 
-    def get_sample(self, sample_idx):
+    def get_sample(self, sample_idx, channels=None):
         chunk = self.get_chunk(*sample_idx[:3])
-        return chunk[sample_idx[-2]:sample_idx[-2] + sample_idx[-1]]
+        if channels is None:
+            channels = sample_idx[-1]
+        return chunk[sample_idx[-2]:sample_idx[-2] + channels]
 
 
 class MeteonetDatasetChunked(Dataset):
@@ -303,7 +305,7 @@ class MeteonetDatasetChunked(Dataset):
         __getitem__(i):
             Retrieves the inputs, targets, and other relevant data for a given index.
     """
-    def __init__(self, root_dir: str, data_type: str, input_len=12, target_pos=18, stride=12, target_is_one_map=False, compressed=False):
+    def __init__(self, root_dir: str, data_type: str, input_len=12, target_pos=18, stride=12, target_is_one_map=False, compressed=False, use_wind=True):
         """
         Initializes the loader with the specified parameters.
 
@@ -328,6 +330,7 @@ class MeteonetDatasetChunked(Dataset):
         self.root_dir = root_dir
         self.target_is_one_map = target_is_one_map
         self.do_not_read_map = False
+        self.use_wind = use_wind
 
         idx_s_all = np.load(join(root_dir, "chunks", "indexs.npy"), mmap_mode="r")
         self.samples = bouget21_chunked(idx_s_all, data_type)
@@ -339,8 +342,6 @@ class MeteonetDatasetChunked(Dataset):
             "target_pos": target_pos,
             "stride": stride,
             "maxs": None,
-            "U_moments": None,
-            "V_moments": None,
             "has_wind": None,
             "items": None,
             "missing_dates": None,
@@ -348,17 +349,24 @@ class MeteonetDatasetChunked(Dataset):
         
         cache_file = join(root_dir, f"moments_{data_type}.npz")
         if isfile(cache_file):
-            print(f"Loading cached moments for {data_type} data from {cache_file}")
-            cached_params = np.load(cache_file, allow_pickle=True)
-            self.params.update(cached_params['arr_0'].item())
-            self.norm_factors = [np.log(1 + self.params["maxs"].max())] + list(self.params["U_moments"]) + list(self.params["V_moments"])
-        else:
-            self._compute_maps_moments()
-            self._compute_items()
-            # save only the computed parameters to a cache file
-            to_save_keys = ["maxs", "U_moments", "V_moments", "has_wind", "items", "missing_dates"]
-            to_save = {k: v for k, v in self.params.items() if k in to_save_keys}
-            np.savez_compressed(cache_file, to_save)
+            try:
+                print(f"Loading cached moments for {data_type} data from {cache_file}")
+                cached_params = np.load(cache_file, allow_pickle=True)
+                self.params.update(cached_params['arr_0'].item())
+                self.norm_factors = [np.log(1 + self.params["maxs"].max())]
+                if use_wind:
+                    for v in self.params["U_moments"]: self.norm_factors.append(v)
+                    for v in self.params["V_moments"]: self.norm_factors.append(v)
+                return
+            except Exception as e:
+                print(f"Error loading cached moments: {e}")
+        # else:
+        self._compute_maps_moments()
+        self._compute_items()
+        # save only the computed parameters to a cache file
+        to_save_keys = ["maxs", "U_moments", "V_moments", "has_wind", "items", "missing_dates"]
+        to_save = {k: v for k, v in self.params.items() if k in to_save_keys}
+        np.savez_compressed(cache_file, to_save)
 
     def _compute_maps_moments(self):
         maxs, Umean, Vmean, Uvar, Vvar, size = [], 0.0, 0.0, 0.0, 0.0, 0.0
@@ -374,14 +382,19 @@ class MeteonetDatasetChunked(Dataset):
                 has_wind.append(True)
             else:
                 has_wind.append(False)
-        Umean, Vmean = Umean / size, Vmean / size
         self.params.update({
-            "U_moments": (Umean, np.sqrt(Uvar / size - Umean**2)),
-            "V_moments": (Vmean, np.sqrt(Vvar / size - Vmean**2)),
             "maxs": np.array(maxs),
             "has_wind": np.array(has_wind),
         })
-        self.norm_factors = [np.log(1 + self.params["maxs"].max())] + list(self.params["U_moments"]) + list(self.params["V_moments"])
+        self.norm_factors = [np.log(1 + self.params["maxs"].max())]
+
+        if self.use_wind:
+            Umean, Vmean = Umean / size, Vmean / size
+            self.params["U_moments"] = (Umean, np.sqrt(Uvar / size - Umean**2))
+            self.params["V_moments"] = (Vmean, np.sqrt(Vvar / size - Vmean**2))
+            for v in self.params['U_moments']: self.norm_factors.append(v)
+            for v in self.params['V_moments']: self.norm_factors.append(v)
+
 
     def _compute_items(self):
         missing_dates, items = [], []
@@ -416,12 +429,14 @@ class MeteonetDatasetChunked(Dataset):
             return np.zeros((1, 1))
         input_maps = []
         for idx in item[:self.params["input_len"]]:
-            cur_map = torch.Tensor(self.loader.get_sample(self.samples[idx]).copy())
+            cur_map = torch.Tensor(self.loader.get_sample(self.samples[idx], channels=(1 if not self.use_wind else None)).copy())
             cur_map[0] = torch.log(cur_map[0] + 1 + epsilon) / self.norm_factors[0]
-            cur_map[1] = (cur_map[1] - self.norm_factors[1]) / self.norm_factors[2]
-            cur_map[2] = (cur_map[2] - self.norm_factors[3]) / self.norm_factors[4]
+
+            if self.use_wind:
+                cur_map[1] = (cur_map[1] - self.norm_factors[1]) / self.norm_factors[2]
+                cur_map[2] = (cur_map[2] - self.norm_factors[3]) / self.norm_factors[4]
             input_maps.append(cur_map)
-        return torch.cat(input_maps, dim=0)
+        return torch.stack(input_maps, dim=0)
 
     def _get_targets(self, item: np.array):
         if self.do_not_read_map:
@@ -433,10 +448,10 @@ class MeteonetDatasetChunked(Dataset):
 
     def __getitem__(self, i: int):
         item = self.params["items"][i]
-        if item.min() == -1 or not self.params["has_wind"][item[:self.params["input_len"]]].all():
+        if item.min() == -1 or (not self.params["has_wind"][item[:self.params["input_len"]]].all() and self.use_wind):
             return None
         return {
-            "inputs": self._get_inputs(item),
+            "inputs": self._get_inputs(item), # (T, 3 or 1, H, W)
             "target": self._get_targets(item),
             "persistence": torch.Tensor(self.loader.get_sample(self.samples[item[self.params["input_len"] - 1]])[0].copy()) if not self.do_not_read_map else np.zeros((1, 1)),
             "target_name": self._sample_name(self.samples[item[-1]]),

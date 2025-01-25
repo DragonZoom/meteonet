@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 from meteonet.utilities import split_date
 
-def main(rainmaps_dir, dest_folder, compress):
+def main(rainmaps_dir, dest_folder, compress, include_wind):
     ###############################################################################
     # collect all rainmaps
     all_files = glob(join(rainmaps_dir, '*.npz'))
@@ -38,14 +38,17 @@ def main(rainmaps_dir, dest_folder, compress):
             #
             rain_map = list(np.load(f, mmap_mode='r').values())[0]
             #
-            wind_path_U = f.replace("rainmaps", os.path.join("windmaps", "U"))
-            wind_path_V = f.replace("rainmaps", os.path.join("windmaps", "V"))
-            #
-            try:
-                wmap_U = list(np.load(wind_path_U, mmap_mode='r').values())[0]
-                wmap_V = list(np.load(wind_path_V, mmap_mode='r').values())[0]
-                cur_map = np.stack([rain_map, wmap_U, wmap_V], axis=0)
-            except FileNotFoundError:
+            if include_wind:
+                wind_path_U = f.replace("rainmaps", os.path.join("windmaps", "U"))
+                wind_path_V = f.replace("rainmaps", os.path.join("windmaps", "V"))
+                #
+                try:
+                    wmap_U = list(np.load(wind_path_U, mmap_mode='r').values())[0]
+                    wmap_V = list(np.load(wind_path_V, mmap_mode='r').values())[0]
+                    cur_map = np.stack([rain_map, wmap_U, wmap_V], axis=0)
+                except FileNotFoundError:
+                    cur_map = rain_map
+            else:
                 cur_map = rain_map
             cur_map = cur_map.reshape(-1, 128, 128)
             #
@@ -72,6 +75,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process rainmaps and create chunks.')
     parser.add_argument('--rainmaps_dir', type=str, default='data/rainmaps', help='Directory containing rainmaps')
     parser.add_argument('--dest_folder', type=str, default='data-chunked', help='Destination folder for chunks')
-    parser.add_argument('--compress', type=bool, default=True, help='Compress chunks to .npz')
+    parser.add_argument('--compress', type=bool, default=False, help='Compress chunks to .npz')
+    parser.add_argument('--include_wind', type=bool, default=False, help='Include Wind maps')
     args = parser.parse_args()
-    main(args.rainmaps_dir, args.dest_folder, args.compress)
+
+    # print args
+    print(f"rainmaps_dir: {args.rainmaps_dir}")
+    print(f"dest_folder: {args.dest_folder}")
+    print(f"compress: {args.compress}")
+    print(f"include_wind: {args.include_wind}")
+
+    main(args.rainmaps_dir, args.dest_folder, args.compress, args.include_wind)
