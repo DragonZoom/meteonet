@@ -9,16 +9,7 @@ from meteonet.utilities import calculate_CT, calculate_BS, map_to_classes
 
 from tqdm import tqdm
 from os.path import join
-
-
-def separate_radar_wind(x):
-    B, C, H, W = x.shape
-    input_len = C // 3
-    radars = x[:, : :3].view(B, input_len, 1, H, W)
-    u_maps = x[:, 1::3].view(B, input_len, 1, H, W)
-    v_maps = x[:, 2::3].view(B, input_len, 1, H, W)
-    wind = torch.cat([u_maps, v_maps], dim=2)
-    return radars, wind
+import time
 
 
 def calculate_weights(radar):
@@ -32,11 +23,11 @@ def calculate_weights(radar):
         torch.Tensor: Weight tensor with the same shape as radar.
     """
     weights = torch.ones_like(radar)
-    weights = torch.where(radar >= 0.83, torch.tensor(2.0, device=radar.device), weights)
-    weights = torch.where(radar >= 8.33, torch.tensor(6.0, device=radar.device), weights)
-    weights = torch.where(radar >= 20.3, torch.tensor(10.0, device=radar.device), weights)
-    weights = torch.where(radar >= 40, torch.tensor(20.0, device=radar.device), weights)
-    weights = torch.where(radar >= 70, torch.tensor(60.0, device=radar.device), weights)
+    weights = torch.where(radar >= 83, torch.tensor(2.0, device=radar.device), weights)
+    weights = torch.where(radar >= 833, torch.tensor(6.0, device=radar.device), weights)
+    weights = torch.where(radar >= 2030, torch.tensor(10.0, device=radar.device), weights)
+    weights = torch.where(radar >= 4000, torch.tensor(20.0, device=radar.device), weights)
+    weights = torch.where(radar >= 7000, torch.tensor(60.0, device=radar.device), weights)
     return weights
 
 def loss_stage1(predicted, ground_truth):
@@ -61,9 +52,10 @@ def loss_stage1(predicted, ground_truth):
 
     # Compute the weighted loss for each pixel and each timestep
     weighted_loss = weights * (squared_diff + absolute_diff)
+    # print(f"{weighted_loss.max()=} {squared_diff.max()=} {absolute_diff.max()=}")
 
     # Average over spatial dimensions, time, and batch
-    loss = (weighted_loss / T).sum()
+    loss = (weighted_loss / T).mean()
 
     return loss
 
@@ -102,6 +94,7 @@ def train_meteonet_gan(
         f1_pers, bias_pers, ts_pers = calculate_BS(CT_pers, ["F1", "BIAS", "TS"])
         RMSE_pers += ((persistance - target) ** 2).mean()
         N += target.shape[0]
+        # break
 
     RMSE_pers = (RMSE_pers / N) * 0.5
 
@@ -149,6 +142,13 @@ def train_meteonet_gan(
                 betas=(0.5, 0.999),
             )
 
+        #
+        gen1_inference_time = 0
+        gen2_inference_time = 0
+        disc_real_inference_time = 0
+        disc_fake_inference_time = 0
+        #
+
         model_generator1.train()
         model_generator2.train()
         model_discriminator.train()
@@ -161,36 +161,43 @@ def train_meteonet_gan(
             x, y = x.to(device), y.to(device)
 
             # separate radar data from wind maps
-            x_radar, x_wind = separate_radar_wind(x)
             B, T, H, W = y.shape
             
             # First stage generator
-            fake_im_first_stage = model_generator1(x_radar, x_wind).view(B, T, H, W)
+            fake_im_first_stage = model_generator1(x).view(B, T, H, W)
             # compute the loss for the first stage generator
             loss_g1 = loss_stage1(fake_im_first_stage, y)
             optimizer_g1.zero_grad()
-            loss_g1.backward(retain_graph=True)
+            start_time = time.time()
+            loss_g1.backward()
+            gen1_inference_time += time.time() - start_time
             optimizer_g1.step()
             
+            fake_im_first_stage = fake_im_first_stage.detach()
             l = loss_g1.item()
             train_losses_g1.append(l)
             train_loss_g1 += l
             
             
             # Second stage generator
-            fake_im = model_generator2(x_radar, x_wind, fake_im_first_stage.detach().view(B, T, 1, H, W)).view(B, T, 1, H, W)
+            start_time = time.time()
+            fake_im = model_generator2(x, fake_im_first_stage.view(B, T, 1, H, W)).view(B, T, 1, H, W)
+            gen2_inference_time += time.time() - start_time
             
             # classify the real images
+            start_time = time.time()
             yhat_real = model_discriminator(y.view(B, T, 1, H, W))
+            disc_real_inference_time += time.time() - start_time
 
             # classify the fake images
+            start_time = time.time()
             yhat_fake = model_discriminator(fake_im.detach())
 
             # compute the loss for the discriminator
             real_targets = torch.ones_like(yhat_real)
             fake_targets = torch.zeros_like(yhat_fake)
             loss_d = nn.BCELoss()(yhat_real, real_targets) + nn.BCELoss()(
-                yhat_fake, fake_targets
+            yhat_fake, fake_targets
             )
             optimizer_d.zero_grad()
             loss_d.backward(retain_graph=True)
@@ -198,13 +205,16 @@ def train_meteonet_gan(
             l = loss_d.item()
             train_losses_d.append(l)
             train_loss_d += l
+            disc_fake_inference_time += time.time() - start_time
 
             # compute the loss for the generator
-            W_LOSS_STAGE_2 = [1, 200, 200]
+            W_LOSS_STAGE_2 = [1, 1, 1]
             yhat_fake_for_g = model_discriminator(fake_im)
-            loss_g2 = W_LOSS_STAGE_2[0] * nn.BCELoss()(yhat_fake_for_g, torch.ones_like(yhat_fake_for_g))
-            loss_g2 += W_LOSS_STAGE_2[1] * (fake_im.view(B, T, H, W) - y).pow(2).mean()
-            loss_g2 += W_LOSS_STAGE_2[2] * (fake_im.view(B, T, H, W) - y).abs().mean()
+            loss_g2_d   = W_LOSS_STAGE_2[0] * nn.BCELoss()(yhat_fake_for_g, torch.ones_like(yhat_fake_for_g))
+            loss_g2_p2  = W_LOSS_STAGE_2[1] * (fake_im.view(B, T, H, W) - y).pow(2).mean()
+            loss_g2_abs = W_LOSS_STAGE_2[2] * (fake_im.view(B, T, H, W) - y).abs().mean()
+            # print(f"loss_g2_d: {loss_g2_d.item()} loss_g2_p2: {loss_g2_p2.item()} loss_g2_abs: {loss_g2_abs.item()}")
+            loss_g2 = loss_g2_d + loss_g2_p2 + loss_g2_abs
             optimizer_g2.zero_grad()
             loss_g2.backward()
             optimizer_g2.step()
@@ -218,7 +228,11 @@ def train_meteonet_gan(
         train_loss_g2 = train_loss_g2 / N
         train_loss_d = train_loss_d / N
         train_losses.append(train_loss_g2)
-        print(f"epoch {epoch+1} {train_loss_g2=}")
+        print(f"epoch {epoch+1} {train_loss_g1=} {train_loss_g2=} {train_loss_d=}")
+        print(f"Generator 1 inference time: {gen1_inference_time:.4f} seconds")
+        print(f"Generator 2 inference time: {gen2_inference_time:.4f} seconds")
+        print(f"Discriminator real inference time: {disc_real_inference_time:.4f} seconds")
+        print(f"Discriminator fake inference time: {disc_fake_inference_time:.4f} seconds")
 
         model_generator1.eval()
         model_generator2.eval()
@@ -229,10 +243,9 @@ def train_meteonet_gan(
         for batch in tqdm(val_loader, unit=" batches"):
             x, y = batch["inputs"], batch["target"]
             x, y = x.to(device), y.to(device)
-            x_radar, x_wind = separate_radar_wind(x)
             with torch.no_grad():
-                y_hat = model_generator1(x_radar, x_wind)
-                y_hat = model_generator2(x_radar, x_wind, y_hat)[:, -1]
+                y_hat = model_generator1(x)
+                y_hat = model_generator2(x, y_hat)[:, -1].squeeze(1)
             l = loss(y_hat, y)
             val_loss += l.item()
             CT_pred += calculate_CT(

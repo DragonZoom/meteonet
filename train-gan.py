@@ -69,7 +69,8 @@ parser.add_argument(
     "-ss", "--snapshot-step", type=int, help="", dest="snapshot_step", default=5
 )
 parser.add_argument("-db", "--debug", type=bool, help="", dest="debug", default=False)
-parser.add_argument("-lt", "--light", type=bool, help="", dest="light", default=False)
+# models: FsrGAN, FsrGAN_light, FsrGAN_no_wind
+parser.add_argument("-m", "--model", type=str, help="", dest="model", default="FsrGAN")
 
 # parser.add_argument('-f', '--load', dest='load', type=str, default=False, help='Load model from a .pth file')
 # parser.add_argument( '-gs', '--global-step-start', metavar='gstp', type=int, default=0,
@@ -130,6 +131,39 @@ Others params:
 
 device = torch.device(device)
 
+# model
+from models.FsrGAN import (
+    FirstStage,
+    FsrSecondStageGenerator,
+    FsrDiscriminator,
+    # FsrSecondStageGeneratorLight,
+)
+from trainers.gan import train_meteonet_gan
+from datetime import datetime
+
+use_window = True
+if args.model == "FsrGAN_light":
+    model1_g = FirstStage(input_len, time_horizon)
+    # model2_g = FsrSecondStageGeneratorLight(input_len, time_horizon)
+    model2_g = FsrSecondStageGenerator(input_len, time_horizon, size_factor=4)
+
+elif args.model == "FsrGAN_no_wind":
+    from models.FsrGAN_no_wind import RadarSecondStageGenerator, RadarFirstStage
+
+    model2_g = RadarSecondStageGenerator(input_len, time_horizon, size_factor=4)
+    model1_g = RadarFirstStage(input_len, time_horizon)
+    use_window = False
+
+elif args.model == "FsrGAN":
+    model1_g = FirstStage(input_len, time_horizon)
+    model2_g = FsrSecondStageGenerator(input_len, time_horizon)
+else:
+    raise ValueError(f"Unknown model {args.model}")
+
+model_d = FsrDiscriminator(time_horizon)
+print(f'Use window: {use_window}')
+
+# data
 from meteonet.loader import MeteonetDatasetChunked
 from meteonet.samplers import meteonet_random_oversampler, meteonet_sequential_sampler
 from torch.utils.data import DataLoader
@@ -138,11 +172,12 @@ from os.path import join
 
 train_ds = MeteonetDatasetChunked(
     args.data_dir,
-    'train' if not args.debug else 'test', # limit the number of files for testing
+    "train" if not args.debug else "test",  # limit the number of files for testing
     input_len,
     input_len + time_horizon,
     stride,
     target_is_one_map=False,
+    use_wind=use_window,
 )
 val_ds = MeteonetDatasetChunked(
     args.data_dir,
@@ -151,6 +186,7 @@ val_ds = MeteonetDatasetChunked(
     input_len + time_horizon,
     stride,
     target_is_one_map=True,
+    use_wind=use_window,
 )
 
 val_ds.norm_factors = train_ds.norm_factors
@@ -187,21 +223,8 @@ size of val items/batch
 
 
 ## Model & training procedure
-from models.FsrGAN import (
-    FirstStage,
-    FsrSecondStageGenerator,
-    FsrDiscriminator,
-    FsrSecondStageGeneratorLight,
-)
 from trainers.gan import train_meteonet_gan
 from datetime import datetime
-
-model1_g = FirstStage(input_len, time_horizon)
-if args.light:
-    model2_g = FsrSecondStageGeneratorLight(input_len, time_horizon)
-else:
-    model2_g = FsrSecondStageGenerator(input_len, time_horizon)
-model_d = FsrDiscriminator(time_horizon)
 
 # try:
 
