@@ -22,40 +22,41 @@ def separate_radar_wind(x):
 #              First Stage: Fuse Radar & Satellite to Predict R_{t+1...t+T}
 ###############################################################################
 class FirstStage(nn.Module):
-    def __init__(self, input_len, pred_len):
+    def __init__(self, input_len, pred_len, size_factor=1):
         super(FirstStage, self).__init__()
         self.pred_len = pred_len
+        self.size_factor = size_factor
 
         self.ren = FirstStageEncoder(
             input_len,
             1,
-            er0_channels=4,
-            er1_channels=8,
-            er2_channels=16,
+            er0_channels=4 * size_factor,
+            er1_channels=8 * size_factor,
+            er2_channels=16 * size_factor,
         )
         self.sen = FirstStageEncoder(
             input_len,
             2,
-            er0_channels=4,
-            er1_channels=8,
-            er2_channels=16,
+            er0_channels=4 * size_factor,
+            er1_channels=8 * size_factor,
+            er2_channels=16 * size_factor,
         )
 
         # in origina; paper it is for 4 selected satellite channels
         self.wind_map_down_sample = nn.Sequential(
-            DownsampleBlock(2 * input_len, 4 * input_len),
-            DownsampleBlock(4 * input_len, 8 * input_len),
-            DownsampleBlock(8 * input_len, 16 * input_len),
+            DownsampleBlock(2 * input_len, 4 * input_len * size_factor),
+            DownsampleBlock(4 * input_len * size_factor, 8 * input_len * size_factor),
+            DownsampleBlock(8 * input_len * size_factor, 16 * input_len * size_factor),
         )
 
-        self.sca_large = SCA(16)
-        self.sca_middle = SCA(8)
+        self.sca_large = SCA(16 * size_factor)
+        self.sca_middle = SCA(8 * size_factor)
 
-        self.rdn3 = FirstStageDecoderBlock(16, 8, T=input_len)
-        self.rdn2 = FirstStageDecoderBlock(8, 4, T=input_len)
-        self.rdn1 = FirstStageDecoderBlock(4, 2, T=input_len)
+        self.rdn3 = FirstStageDecoderBlock(16 * size_factor, 8 * size_factor, T=input_len, h=16, w=16)
+        self.rdn2 = FirstStageDecoderBlock(8 * size_factor, 4 * size_factor, T=input_len, h=32, w=32)
+        self.rdn1 = FirstStageDecoderBlock(4 * size_factor, 2 * size_factor, T=input_len, h=64, w=64)
         self.final_conv = nn.Conv2d(
-            in_channels=2 * input_len, out_channels=pred_len, kernel_size=1
+            in_channels=2 * input_len * size_factor, out_channels=pred_len, kernel_size=1
         )
 
     def forward(self, x):
@@ -78,7 +79,7 @@ class FirstStage(nn.Module):
         B, T, C, H, W = wind_data.size()
         wind_data = wind_data.view(B, C * T, H, W)
         wind_map = self.wind_map_down_sample(wind_data)
-        wind_map = wind_map.view(B, T, 16, H // 8, W // 8)
+        wind_map = wind_map.view(B, T, 16 * self.size_factor, H // 8, W // 8)
 
         # decoder
         out = self.rdn3(wind_map, H2)
