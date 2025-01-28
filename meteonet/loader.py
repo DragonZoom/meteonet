@@ -309,7 +309,7 @@ class MeteonetDatasetChunked(Dataset):
         __getitem__(i):
             Retrieves the inputs, targets, and other relevant data for a given index.
     """
-    def __init__(self, root_dir: str, data_type: str, input_len=12, target_pos=18, stride=12, target_is_one_map=False, compressed=False, use_wind=True):
+    def __init__(self, root_dir: str, data_type: str, input_len=12, target_pos=18, stride=12, target_is_one_map=False, compressed=False, use_wind=True, normalize_target=True):
         """
         Initializes the loader with the specified parameters.
 
@@ -335,6 +335,7 @@ class MeteonetDatasetChunked(Dataset):
         self.target_is_one_map = target_is_one_map
         self.do_not_read_map = False
         self.use_wind = use_wind
+        self.normalize_target = normalize_target
 
         idx_s_all = np.load(join(root_dir, "chunks", "indexs.npy"), mmap_mode="r")
         self.samples = bouget21_chunked(idx_s_all, data_type)
@@ -437,13 +438,19 @@ class MeteonetDatasetChunked(Dataset):
     def __len__(self):
         return self.params["items"].shape[0]
 
+    def normalize_rainmap(self, rainmap):
+        return torch.log(rainmap + 1 + epsilon) / self.norm_factors[0]
+    
+    def denormalize_rainmap(self, rainmap):
+        return torch.exp(rainmap * self.norm_factors[0]) - 1 - epsilon
+
     def _get_inputs(self, item: np.array):
         if self.do_not_read_map:
             return np.zeros((1, 1))
         input_maps = []
         for idx in item[:self.params["input_len"]]:
             cur_map = torch.Tensor(self.loader.get_sample(self.samples[idx], channels=(1 if not self.use_wind else None)).copy())
-            cur_map[0] = torch.log(cur_map[0] + 1 + epsilon) / self.norm_factors[0]
+            cur_map[0] = self.normalize_rainmap(cur_map[0])
 
             if self.use_wind:
                 cur_map[1] = (cur_map[1] - self.norm_factors[1]) / self.norm_factors[2]
@@ -455,9 +462,11 @@ class MeteonetDatasetChunked(Dataset):
         if self.do_not_read_map:
             return np.zeros((1, 1))
         if self.target_is_one_map:
-            return torch.Tensor(self.loader.get_sample(self.samples[item[-1]])[0].copy())
-        targets = [torch.Tensor(self.loader.get_sample(self.samples[idx])[0].copy()) for idx in item[self.params["input_len"]:]]
-        return torch.stack(targets, dim=0)
+            targets = torch.Tensor(self.loader.get_sample(self.samples[item[-1]])[0].copy())
+        else:
+            targets = [torch.Tensor(self.loader.get_sample(self.samples[idx])[0].copy()) for idx in item[self.params["input_len"]:]]
+            targets = torch.stack(targets, dim=0)
+        return self.normalize_rainmap(targets) if self.normalize_target else targets
 
     def __getitem__(self, i: int):
         item = self.params["items"][i]
