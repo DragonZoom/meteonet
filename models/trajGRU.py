@@ -3,15 +3,14 @@ from torch import nn
 import torch.nn.functional as F
 
 RNN_ACT_TYPE = lambda x: F.leaky_relu(x, negative_slope=0.2, inplace=True)
-DEVICE = torch.device("cpu" if torch.cuda.is_available() else "cpu")
 
 # input: B, C, H, W
 # flow: [B, 2, H, W]
 def wrap(input, flow):
     B, C, H, W = input.size()
     # mesh grid
-    xx = torch.arange(0, W).view(1, -1).repeat(H, 1).to(DEVICE)
-    yy = torch.arange(0, H).view(-1, 1).repeat(1, W).to(DEVICE)
+    xx = torch.arange(0, W).view(1, -1).repeat(H, 1).to(input.device)
+    yy = torch.arange(0, H).view(-1, 1).repeat(1, W).to(input.device)
     xx = xx.view(1, 1, H, W).repeat(B, 1, 1, 1)
     yy = yy.view(1, 1, H, W).repeat(B, 1, 1, 1)
     grid = torch.cat((xx, yy), 1).float()
@@ -135,7 +134,7 @@ class TrajGRU(BaseConvRNN):
     def forward(self, seq_len, inputs=None, states=None):
         if states is None:
             states = torch.zeros((inputs.size(1), self._num_filter, self._state_height,
-                                  self._state_width), dtype=torch.float).to(DEVICE)
+                                  self._state_width), dtype=torch.float).to(inputs.device)
         if inputs is not None:
             S, B, C, H, W = inputs.size()
             i2h = self.i2h(torch.reshape(inputs, (-1, C, H, W)))
