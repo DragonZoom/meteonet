@@ -425,6 +425,15 @@ class MeteonetDatasetChunked(Dataset):
         year, month, day, hour, mi, _, _ = sample_idx
         return f"y{year}-M{month}-d{day}-h{hour}-m{mi}.npz"
 
+    def get_item_idx_by_date(self, date: tuple):
+        for i, sample in enumerate(self.samples):
+            if (sample[:5] == date).all():
+                data_idx = i
+                for item_id, item in enumerate(self.params["items"]):
+                    if data_idx in item:
+                        return item_id
+        return None
+
     def __len__(self):
         return self.params["items"].shape[0]
 
