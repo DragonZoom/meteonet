@@ -7,3 +7,5 @@ runs
 lastrun
 data*
 cache
+best_runs
+optuna_runs
