@@ -218,17 +218,21 @@ def bouget21_chunked(samples_idx_s, data_type="train"):
     for idx in samples_idx_s:
         year, month, day, hour, mi, data_idx, channels = idx
         yday = datetime(year, month, day).timetuple().tm_yday - 1
-        if data_type == "val" and year == 2018 and (yday // 7) % 2 == 0:
+        if data_type.startswith("val") and year == 2018 and (yday // 7) % 2 == 0:
             idx_s.append(idx)
         elif (
-            data_type == "test"
+            data_type.startswith("test")
             and year == 2018
             and not (yday % 7 == 0 and hour == 0)
             and (yday // 7) % 2 != 0
         ):
             idx_s.append(idx)
-        elif data_type == "train" and (year == 2016 or year == 2017):
+        elif data_type.startswith("train") and (year == 2016 or year == 2017):
             idx_s.append(idx)
+
+    # return a small subset of the data
+    if data_type.count("small"):
+        return np.array(idx_s[:len(idx_s) // 10])
     return np.array(idx_s)
 
 
