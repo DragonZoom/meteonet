@@ -103,28 +103,29 @@ class FsrDiscriminator(nn.Module):
     A patch-based or global discriminator for adversarial training.
     Here we define a small CNN that classifies real/fake.
     """
-
-    def __init__(self, input_len):
+    def __init__(self, input_len, size_factor=1):
         super(FsrDiscriminator, self).__init__()
         self.model = nn.Sequential(
-            nn.Conv2d(input_len, 32, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(128),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=0),
-            nn.BatchNorm2d(256),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(256, input_len, kernel_size=4, stride=4, padding=0),
+            nn.Conv2d(input_len, 64 // size_factor, kernel_size=4, stride=2, padding=1),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(64 // size_factor, 128 // size_factor, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(128 // size_factor),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(128 // size_factor, 256 // size_factor, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(256 // size_factor),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(256 // size_factor, 512 // size_factor, kernel_size=4, stride=2, padding=0),
+            nn.BatchNorm2d(512 // size_factor),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(512 // size_factor, 1, kernel_size=4, stride=4, padding=0),
+            nn.Sigmoid(),
         )
+
 
     def forward(self, x):
         """
         x: shape (B, input_len, 1, H, W)
-        returns: shape (B. input_len), real/fake classification for each time stamp
+        returns: shape (B, input_len), real/fake classification for each time stamp
         """
         B, T, C, H, W = x.size()
         assert C == 1, "Discriminator input should have 1 channel"
@@ -133,8 +134,9 @@ class FsrDiscriminator(nn.Module):
         y = self.model(x)
         # flatten to (B, input_len)
         y = y.view(x.size(0), -1)
-        # apply sigmoid
-        y = torch.sigmoid(y)
+
+        EXPECTED = 1
+        assert y.size(1) == EXPECTED, f"Expected {EXPECTED} outputs, got {y.size(1)}"
         return y
 
 
@@ -423,13 +425,13 @@ class FsrSecondStageGenerator(nn.Module):
         fs6 = self.fs6(fs5)
         fs7 = self.fs7(fs6)
         # DSRAB
-        fs1 = self.fs_dsrab1(fs1)
-        fs2 = self.fs_dsrab2(fs2)
-        fs3 = self.fs_dsrab3(fs3)
-        fs4 = self.fs_dsrab4(fs4)
-        fs5 = self.fs_dsrab5(fs5)
-        fs6 = self.fs_dsrab6(fs6)
-        fs7 = self.fs_dsrab7(fs7)
+        # fs1 = self.fs_dsrab1(fs1)
+        # fs2 = self.fs_dsrab2(fs2)
+        # fs3 = self.fs_dsrab3(fs3)
+        # fs4 = self.fs_dsrab4(fs4)
+        # fs5 = self.fs_dsrab5(fs5)
+        # fs6 = self.fs_dsrab6(fs6)
+        # fs7 = self.fs_dsrab7(fs7)
 
         # Decoder
         dec8 = self.dc8(enc8)
@@ -437,17 +439,18 @@ class FsrSecondStageGenerator(nn.Module):
         dec6 = self.dc6(torch.cat([enc6, dec7, fs6], dim=1))
         #
         dec5 = self.dc5(torch.cat([enc5, dec6, fs5], dim=1))
-        dec5 = self.dc5_dsrab(dec5) + dec5
+        # dec5 = self.dc5_dsrab(dec5) + dec5
         #
         dec4 = self.dc4(torch.cat([enc4, dec5, fs4], dim=1))
-        dec4 = self.dc4_dsrab(dec4) + dec4
+        # dec4 = self.dc4_dsrab(dec4) + dec4
         #
         dec3 = self.dc3(torch.cat([enc3, dec4, fs3], dim=1))
-        dec3 = self.dc3_dsrab(dec3) + dec3
+        # dec3 = self.dc3_dsrab(dec3) + dec3
         #
         dec2 = self.dc2(torch.cat([enc2, dec3, fs2], dim=1))
         dec1 = self.dc1(torch.cat([enc1, dec2, fs1], dim=1))
 
+        # return dec1
         out = dec1 + first_stage_pred
         return out
 
