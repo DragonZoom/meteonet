@@ -479,6 +479,32 @@ class MeteonetDatasetChunked(Dataset):
             "target_name": self._sample_name(self.samples[item[-1]]),
         }
 
+###############################################################################
+#
+###############################################################################
+class DatsetWrapperFsrSecondStage(Dataset):
+    """
+    A class to wrap the MeteonetDatasetChunked for the second stage of the FSR model.
+    This class adds the first stage predictions to the data.
+    """
+    def __init__(self, first_stage_preds_path: str, dataset: Dataset, model=None):
+        self.first_stage_preds_path = first_stage_preds_path
+        self.dataset = dataset
+        self.model = model
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, i):
+        data = self.dataset[i]
+        if data is None:
+            return None
+        target_name = data["target_name"].split(".")[0]
+        filename = join(self.first_stage_preds_path, target_name + ".npy")
+        y_hat = np.load(filename)
+        data["first_stage_pred"] = torch.Tensor(y_hat)
+        return data
+
 
 ###############################################################################
 ###############################################################################
