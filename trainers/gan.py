@@ -256,6 +256,7 @@ def train_meteonet_gan_stage2(
     snapshot_step=5,
     rundir="runs/s2",
     device="cpu",
+    target_is_one_map=False,
 ):
     print("Evaluation Persistence...")
     # on garde les métriques ensemblistes.
@@ -265,7 +266,7 @@ def train_meteonet_gan_stage2(
     N = 0
     for batch in tqdm(val_loader):
         persistance = batch["persistence"]
-        target = batch["target"][:,-1]
+        target = batch["target"][:,-1] if not target_is_one_map else batch["target"]
 
         
         CT_pers += calculate_CT(
@@ -281,7 +282,7 @@ def train_meteonet_gan_stage2(
     RMSE_s1 = 0
     N = 0
     for batch in tqdm(val_loader):
-        target = batch["target"][:,-1]
+        target = batch["target"][:,-1] if not target_is_one_map else batch["target"]
         first_stage_pred = val_loader.dataset.dataset.denormalize_rainmap(batch["first_stage_pred"][:,-1]).squeeze(1)
         
         CT_s1 += calculate_CT(
@@ -310,7 +311,7 @@ def train_meteonet_gan_stage2(
     )
     scheduler_D = torch.optim.lr_scheduler.StepLR(optimizer_D, step_size=1, gamma=0.95)
 
-    TIME_WEIGHTS = calculate_time_weights(train_loader.dataset.dataset.params['target_pos'] - train_loader.dataset.dataset.params['input_len'], device)
+    TIME_WEIGHTS = calculate_time_weights(train_loader.dataset.dataset.params['target_pos'] - train_loader.dataset.dataset.params['input_len'], device) if not target_is_one_map else 1.
 
     print("Start training...")
     train_losses = []
@@ -342,7 +343,11 @@ def train_meteonet_gan_stage2(
             x, y, x_s1 = x.to(device), y.to(device), x_s1.to(device)
 
             # separate radar data from wind maps
-            B, T, H, W = y.shape
+            if target_is_one_map:
+                B, H, W = y.shape
+                T = 1
+            else:
+                B, T, H, W = y.shape
             
             # Second stage generator
             start_time = time.time()
@@ -427,8 +432,12 @@ def train_meteonet_gan_stage2(
         for batch in tqdm(val_loader, unit=" batches"):
             x, y, x_s1 = batch["inputs"], batch["target"], batch["first_stage_pred"]
             x, y, x_s1 = x.to(device), y.to(device), x_s1.to(device)
-            y_norm = val_loader.dataset.dataset.normalize_rainmap(y)
-            B, T, H, W = y.shape
+            if target_is_one_map:
+                B, H, W = y.shape
+                T = 1
+            else:
+                B, T, H, W = y.shape
+            y_norm = val_loader.dataset.dataset.normalize_rainmap(y.view(B, T, 1, H, W))
             with torch.no_grad():
                 y_hat_norm = model_generator(x, x_s1).squeeze(2)
                 yhat_real = model_discriminator(y_norm.view(B, T, 1, H, W))
@@ -438,7 +447,7 @@ def train_meteonet_gan_stage2(
                 for i in range(y_hat.shape[1]):
                     val_loss[i] += loss(y_hat_norm[:, i], y_norm[:, i]).item()
                     CT_pred[i] += calculate_CT(
-                        map_to_classes(y_hat[:, i], thresholds), map_to_classes(y[:, i], thresholds)
+                        map_to_classes(y_hat[:, i], thresholds), map_to_classes(y.view(B, T, H, W)[:, i], thresholds)
                     )
                     RMSE_pred[i] += ((y_norm[:, i] - y_hat_norm[:, i]) ** 2).mean()
                     N += x.shape[0]
