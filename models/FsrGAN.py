@@ -7,16 +7,12 @@ from .FsrGAN_helpers import (
     SelfAttention,
     N2DSRAB,
     SCA,
+    SSA,
     FirstStageEncoder,
     FirstStageDecoderBlock,
 )
 
-
-def separate_radar_wind(x):
-    radars    = x[:,:, 0:1].contiguous()
-    wind_maps = x[:,:, 1:].contiguous()
-    return radars, wind_maps
-
+from .FsrGAN_helpers import separate_radar_wind
 
 ###############################################################################
 #              First Stage: Fuse Radar & Satellite to Predict R_{t+1...t+T}
@@ -49,8 +45,8 @@ class FirstStage(nn.Module):
             DownsampleBlock(8 * input_len * size_factor, 16 * input_len * size_factor),
         )
 
-        self.sca_large = SCA(16 * size_factor)
-        self.sca_middle = SCA(8 * size_factor)
+        self.sca_large = SSA(16 * size_factor)
+        self.sca_middle = SSA(8 * size_factor)
 
         self.rdn3 = FirstStageDecoderBlock(16 * size_factor, 8 * size_factor, T=input_len, h=16, w=16)
         self.rdn2 = FirstStageDecoderBlock(8 * size_factor, 4 * size_factor, T=input_len, h=32, w=32)
