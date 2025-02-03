@@ -309,7 +309,7 @@ class MeteonetDatasetChunked(Dataset):
         __getitem__(i):
             Retrieves the inputs, targets, and other relevant data for a given index.
     """
-    def __init__(self, root_dir: str, data_type: str, input_len=12, target_pos=18, stride=12, target_is_one_map=False, compressed=False, use_wind=True, normalize_target=True):
+    def __init__(self, root_dir: str, data_type: str, input_len=12, target_pos=18, stride=12, target_is_one_map=False, compressed=False, use_wind=True, normalize_target=True, skip_withou_wind=False):
         """
         Initializes the loader with the specified parameters.
 
@@ -336,6 +336,7 @@ class MeteonetDatasetChunked(Dataset):
         self.do_not_read_map = False
         self.use_wind = use_wind
         self.normalize_target = normalize_target
+        self.skip_withou_wind = skip_withou_wind
 
         idx_s_all = np.load(join(root_dir, "chunks", "indexs.npy"), mmap_mode="r")
         self.samples = bouget21_chunked(idx_s_all, data_type)
@@ -470,7 +471,7 @@ class MeteonetDatasetChunked(Dataset):
 
     def __getitem__(self, i: int):
         item = self.params["items"][i]
-        if item.min() == -1 or (not self.params["has_wind"][item[:self.params["input_len"]]].all() and self.use_wind):
+        if item.min() == -1 or (not self.params["has_wind"][item[:self.params["input_len"]]].all() and (self.use_wind or self.skip_withou_wind)):
             return None
         return {
             "inputs": self._get_inputs(item), # (T, 3 or 1, H, W)
