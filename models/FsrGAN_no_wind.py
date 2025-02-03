@@ -7,295 +7,371 @@ from .FsrGAN_helpers import (
     SelfAttention,
     FirstStageEncoder,
     FirstStageDecoderBlock,
+    N2DSRAB,
 )
 
-from .trajGRU import TrajGRU
-
-
-class RadarEncoderBlock(nn.Module):
+class SA(nn.Module):
     """
-    Downsamples + processes a radar sequence with TrajGRU.
+    Spatial Attention (SA) block as shown in Fig.5 of the paper.
+
+    Inputs:
+      E: tensor of shape (B, C, H, W)
+
+    Output:
+      H: tensor of shape (B, C, H, W), computed by applying spatial attention on E.
     """
 
-    def __init__(self,
-                 in_channels: int,
-                 out_channels: int,
-                 input_len: int,
-                 h: int,
-                 w: int):
+    def __init__(self):
         """
         Args:
-            in_channels: channels in the radar data (e.g. 1)
-            out_channels: hidden channels after conv/downsample
-            input_len: sequence length
-            h, w: height & width after downsampling (for TrajGRU).
-                  If you start with, e.g., 128x128 and stride=2 here,
-                  then h,w = 64,64 for the TrajGRU step, etc.
+          channels (int): number of feature channels in E
         """
-        super().__init__()
-        self.out_channels = out_channels
-        self.input_len = input_len
-        self.down = nn.Conv2d(
-            in_channels * input_len,
-            out_channels * input_len,
-            kernel_size=4,
-            stride=2,
-            padding=1
-        )
-        self.act = nn.LeakyReLU(0.2, inplace=True)
-        # Build a TrajGRU that receives `out_channels` as input+output
-        # The 'b_h_w' argument = (batch_size, H, W).
-        # We can put a dummy batch_size=1 here; it uses H/W primarily.
-        self.traj_gru = TrajGRU(
-            input_channel=out_channels,
-            num_filter=out_channels,
-            b_h_w=(1, h, w),
-            zoneout=0.0,
-            L=5,  # or any # of flows
-            i2h_kernel=(3,3),
-            i2h_pad=(1,1),
-            h2h_kernel=(5,5),
+        super(SA, self).__init__()
+
+        # ----------------------------
+        # SPATIAL ATTENTION BRANCH for E
+        # Takes E => computes mean & max (per-channel) => concat => conv => sigmoid
+        # ----------------------------
+        self.conv_spatial = nn.Sequential(
+            nn.Conv2d(
+                in_channels=2, out_channels=1, kernel_size=7, padding=3, bias=False
+            ),
+            nn.BatchNorm2d(1),
+            nn.Sigmoid(),
         )
 
-    def forward(self, x):
+    def forward(self, E):
         """
-        x shape: (B, T, in_channels, H, W)
-        returns: (B, T, out_channels, H/2, W/2)
+        E: (B, C, H, W) -> spatial attention path
+        returns:
+          H: (B, C, H, W)
         """
-        B, T, C, H, W = x.shape
-        # Flatten time into channels so we can downsample:
-        # shape => (B, T*C, H, W)
-        x = x.view(B, C*T, H, W)
-        x = self.down(x)  # stride=2
-        x = self.act(x)
+        # ------------- Spatial Attention on E ------------- #
+        # Compute mean and max along channel dim => (B, 1, H, W) each
+        E_mean = torch.mean(E, dim=1, keepdim=True)
+        E_max, _ = torch.max(E, dim=1, keepdim=True)
 
-        # Un-flatten back into time dimension:
-        # shape => (B, T, out_channels, H/2, W/2)
-        newH, newW = H // 2, W // 2
-        x = x.view(B, T, self.out_channels, newH, newW)
+        # Concat => (B, 2, H, W)
+        E_cat = torch.cat((E_mean, E_max), dim=1)
 
-        # Reorder to (T, B, C, H, W) for TrajGRU
-        x = x.permute(1, 0, 2, 3, 4).contiguous()
+        # Pass through conv -> BN -> Sigmoid => Spatial mask
+        spatial_mask = self.conv_spatial(E_cat)  # (B, 1, H, W)
 
-        # Run TrajGRU over time
-        # The forward method wants (seq_len=T, inputs shape = (T,B,C,H,W))
-        out_seq, _ = self.traj_gru.forward(seq_len=T, inputs=x)
-        # out_seq => (T, B, out_channels, newH, newW)
+        # Multiply with E (element‐wise)
+        E_spatial_att = E * spatial_mask  # (B, C, H, W)
 
-        # Reorder back => (B, T, out_channels, newH, newW)
-        out = out_seq.permute(1, 0, 2, 3, 4).contiguous()
-        return out
-
-
-class RadarEncoder(nn.Module):
-    """
-    Simple multi-level encoder using TrajGRU at each downsampling step.
-    """
-
-    def __init__(self, input_len, in_channels):
-        super().__init__()
-        self.block1 = RadarEncoderBlock(
-            in_channels=in_channels,
-            out_channels=4,
-            input_len=input_len,
-            h=64, w=64  # if your input is 128x128, after stride=2 => 64x64
-        )
-        self.block2 = RadarEncoderBlock(
-            in_channels=4,
-            out_channels=8,
-            input_len=input_len,
-            h=32, w=32  # another stride=2 => 32x32
-        )
-        self.block3 = RadarEncoderBlock(
-            in_channels=8,
-            out_channels=16,
-            input_len=input_len,
-            h=16, w=16  # another stride=2 => 16x16
-        )
-
-    def forward(self, x):
-        """
-        x: (B, T, in_channels, 128, 128) -> example
-        returns: E1, E2, E3
-           E1: (B, T, 4, 64, 64)
-           E2: (B, T, 8, 32, 32)
-           E3: (B, T, 16,16, 16)
-        """
-        E1 = self.block1(x)  # down to 64x64
-        E2 = self.block2(E1) # down to 32x32
-        E3 = self.block3(E2) # down to 16x16
-        return E1, E2, E3
+        return E_spatial_att
 
 
 ###############################################################################
-# RadarDecoder
+#              First Stage: Radar only
 ###############################################################################
-class RadarDecoderBlock(nn.Module):
-    def __init__(self,
-                 in_channels: int,
-                 out_channels: int,
-                 input_len: int,
-                 h: int,
-                 w: int):
-        """
-        If the incoming feature map is shape (B, T, in_channels, H, W),
-        we upsample to (B, T, out_channels, 2H, 2W), then run TrajGRU again.
-        """
-        super().__init__()
-        self.out_channels = out_channels
-        self.input_len = input_len
-
-        # Transposed conv to upsample
-        self.up = nn.ConvTranspose2d(
-            in_channels * input_len,
-            out_channels * input_len,
-            kernel_size=4,
-            stride=2,
-            padding=1
-        )
-        self.act = nn.LeakyReLU(0.2, inplace=True)
-
-        # Another TrajGRU
-        # b_h_w => after upsampling, the new resolution is 2h x 2w
-        self.traj_gru = TrajGRU(
-            input_channel=out_channels,
-            num_filter=out_channels,
-            b_h_w=(1, 2*h, 2*w),
-            L=5
-        )
-
-        self.h = h
-        self.w = w
-
-    def forward(self, x):
-        """
-        x: (B, T, in_channels, h, w)
-        returns: (B, T, out_channels, 2h, 2w)
-        """
-        B, T, C, h, w = x.size()
-        # Flatten T into channels
-        x = x.view(B, C*T, h, w)
-        x = self.up(x)
-        x = self.act(x)
-
-        # Now shape => (B, out_channels*T, 2h, 2w)
-        newH, newW = 2*h, 2*w
-        x = x.view(B, T, self.out_channels, newH, newW)
-
-        # run TrajGRU
-        x = x.permute(1,0,2,3,4)
-        out_seq, _ = self.traj_gru.forward(seq_len=T, inputs=x)
-        out = out_seq.permute(1,0,2,3,4).contiguous()
-        return out
-
-
-###############################################################################
-# RadarFirstStage
-###############################################################################
-class RadarFirstStage(nn.Module):
-    """
-    A first-stage generator that predicts future radar frames using
-    TrajGRU-based encoder-decoder.
-    """
-
-    def __init__(self, input_len, pred_len, in_channels=1):
-        super().__init__()
+class FirstStageRadarOnly(nn.Module):
+    def __init__(self, input_len, pred_len, size_factor=1):
+        super(FirstStageRadarOnly, self).__init__()
         self.pred_len = pred_len
-        self.input_len = input_len
-        self.encoder = RadarEncoder(input_len, in_channels)
+        self.size_factor = size_factor
 
-        # 3-level decoder
-        self.dec3 = RadarDecoderBlock(in_channels=16, out_channels=8, input_len=input_len, h=16, w=16)
-        self.dec2 = RadarDecoderBlock(in_channels=8, out_channels=4, input_len=input_len, h=32, w=32)
-        self.dec1 = RadarDecoderBlock(in_channels=4, out_channels=2, input_len=input_len, h=64, w=64)
-
-        # final 1x1 conv to produce pred_len frames from (2 * input_len) channels
-        self.final_conv = nn.Conv2d(
-            in_channels=2 * input_len,
-            out_channels=pred_len,  # produce pred_len frames
-            kernel_size=1
+        self.ren = FirstStageEncoder(
+            input_len,
+            1,
+            er0_channels=4 * size_factor,
+            er1_channels=8 * size_factor,
+            er2_channels=16 * size_factor,
+        )
+        self.sen = FirstStageEncoder(
+            input_len,
+            2,
+            er0_channels=8 * size_factor,
+            er1_channels=8 * size_factor,
+            er2_channels=16 * size_factor,
         )
 
-    def forward(self, x):
-        """
-        x: (B, input_len, in_channels, 128, 128)
-        returns: (B, pred_len, 1, 128, 128)
-        """
-        E1, E2, E3 = self.encoder(x)  # encode
+        # in origina; paper it is for 4 selected satellite channels
+        self.rain_map_down_sample = nn.Sequential(
+            DownsampleBlock(input_len, 4 * input_len * size_factor),
+            DownsampleBlock(4 * input_len * size_factor, 8 * input_len * size_factor),
+            DownsampleBlock(8 * input_len * size_factor, 16 * input_len * size_factor),
+        )
 
-        # decode
-        D3 = self.dec3(E3)  # => (B, T, 8, 32, 32)
-        D2 = self.dec2(D3)  # => (B, T, 4, 64, 64)
-        D1 = self.dec1(D2)  # => (B, T, 2, 128,128)
+        self.sca_large = SA()
+        self.sca_middle = SA()
 
-        # Flatten T into channels => final conv => get pred_len channels
-        B, T, C, H, W = D1.shape
-        out = D1.view(B, C*T, H, W)
+        self.rdn3 = FirstStageDecoderBlock(16 * size_factor, 8 * size_factor, T=input_len, h=16, w=16)
+        self.rdn2 = FirstStageDecoderBlock(8 * size_factor, 4 * size_factor, T=input_len, h=32, w=32)
+        self.rdn1 = FirstStageDecoderBlock(4 * size_factor, 2 * size_factor, T=input_len, h=64, w=64)
+        self.final_conv = nn.Conv2d(
+            in_channels=2 * input_len * size_factor, out_channels=pred_len, kernel_size=1
+        )
+
+    def forward(self, radar_data):
+        """
+        x: (batch_size, input_len, 1, 128, 128)
+        T: int - number of time steps to predict
+        """
+        assert radar_data.size(2) == 1
+        # radar encoder
+        ER0, ER1, ER2 = self.ren(radar_data)
+
+        # fusion
+        H1 = self.sca_middle(ER1)
+        H2 = self.sca_large(ER2)
+
+        # rain map downsample
+        # (Replacement of selected satellite channels with rain map)
+        B, T, C, H, W = radar_data.size()
+        radar_data = radar_data.view(B, C * T, H, W)
+        radar_data = self.rain_map_down_sample(radar_data)
+        radar_data = radar_data.view(B, T, 16 * self.size_factor, H // 8, W // 8)
+
+        # decoder
+        out = self.rdn3(radar_data, H2)
+        out = self.rdn2(out, H1)
+        out = self.rdn1(out, ER0)
+
+        # Flatten T into chanel dimension
+        B, T, C, H, W = out.size()
+        out = out.view(B, C * T, H, W)
         out = self.final_conv(out)
-
-        # reshape => (B, pred_len, 1, 128, 128)
+        # reshape back
         out = out.view(B, self.pred_len, 1, H, W)
         return out
 
 
-###############################################################################
-# RadarFirstStage
-###############################################################################
-class RadarSecondStageGenerator(nn.Module):
-    """
-    Takes the original radar input and the first-stage coarse prediction
-    and refines it. We'll keep it simpler (maybe just 1-2 conv layers + TrajGRU).
-    """
 
-    def __init__(self, input_len, pred_len):
-        super().__init__()
-        self.input_len = input_len
+
+###############################################################################
+#                         Second-Stage Generator (Radar Only)
+###############################################################################
+class FsrSecondStageGeneratorRadarOnly(nn.Module):
+    def __init__(self, input_len, pred_len, size_factor=1, predict_sequence=False):
+        super(FsrSecondStageGeneratorRadarOnly, self).__init__()
+        in_channels = input_len + pred_len
         self.pred_len = pred_len
+        self.input_len = input_len
+        self.predict_sequence = predict_sequence
 
-        # Simple example: a single TrajGRU layer that sees (T_in + T_out) frames as input channels
-        # plus a final conv that outputs T_out refined frames.
-
-        in_ch = input_len + pred_len
-        hidden = 8  # arbitrary
-        self.conv_in = nn.Conv2d(
-            in_ch, hidden, kernel_size=3, stride=1, padding=1
+        # encoder
+        self.en_conv = nn.Conv2d(
+            in_channels, 32 // size_factor, kernel_size=4, stride=2, padding=1
         )
-        self.traj_gru = TrajGRU(
-            input_channel=hidden,
-            num_filter=hidden,
-            b_h_w=(1, 128, 128),  # full resolution if we do no downsampling
-            L=5
+        self.en2 = nn.Sequential(
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(
+                32 // size_factor, 32 // size_factor, kernel_size=3, stride=1, padding=1
+            ),
+            nn.BatchNorm2d(32 // size_factor),
         )
-        self.conv_out = nn.Conv2d(hidden, pred_len, kernel_size=1)
+        self.en3 = nn.Sequential(
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(
+                32 // size_factor, 32 // size_factor, kernel_size=3, stride=1, padding=1
+            ),
+            nn.BatchNorm2d(32 // size_factor),
+        )
+        self.en4 = nn.Sequential(
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(
+                32 // size_factor, 64 // size_factor, kernel_size=4, stride=2, padding=1
+            ),
+            nn.BatchNorm2d(64 // size_factor),
+        )
+        self.en5 = nn.Sequential(
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(
+                64 // size_factor, 64 // size_factor, kernel_size=3, stride=1, padding=1
+            ),
+            nn.BatchNorm2d(64 // size_factor),
+        )
+        self.en6 = nn.Sequential(
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(
+                64 // size_factor,
+                128 // size_factor,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+            ),
+            nn.BatchNorm2d(128 // size_factor),
+        )
+        self.en7 = nn.Sequential(
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(
+                128 // size_factor,
+                256 // size_factor,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+            ),
+            nn.BatchNorm2d(256 // size_factor),
+        )
+        self.en8 = nn.Sequential(
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(
+                256 // size_factor,
+                512 // size_factor,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+            ),
+        )
 
-    def forward(self, radar_data, first_stage_pred):
-        """
-        radar_data:      (B, input_len, 1, H, W)
-        first_stage_pred:(B, pred_len, 1, H, W)
-        returns refined frames => (B, pred_len, 1, H, W)
-        """
-        B, T_in, _, H, W = radar_data.shape
-        B, T_out, _, _, _ = first_stage_pred.shape
+        self.en_att5 = SelfAttention(64 // size_factor)
+        self.en_att6 = SelfAttention(128 // size_factor)
+        self.en_att7 = SelfAttention(256 // size_factor)
+        self.en_att8 = SelfAttention(512 // size_factor)
 
-        # Flatten them along channel dimension:
-        x_in  = radar_data.view(B, T_in, H, W)          # => (B, T_in, H, W)
-        x_pred= first_stage_pred.view(B, T_out, H, W)   # => (B, T_out, H, W)
-        x = torch.cat([x_in, x_pred], dim=1)            # => (B, T_in + T_out, H, W)
+        # decoder
+        self.dc8 = nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(
+                512 // size_factor,
+                out_channels=256 // size_factor,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+            ),
+            nn.BatchNorm2d(256 // size_factor),
+            nn.Dropout2d(inplace=True),
+        )
+        self.dc7 = nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(
+                2 * 256 // size_factor,
+                out_channels=128 // size_factor,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+            ),
+            nn.BatchNorm2d(128 // size_factor),
+            nn.Dropout2d(inplace=True),
+        )
+        self.dc6 = nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(
+                2 * 128 // size_factor,
+                out_channels=64 // size_factor,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+            ),
+            nn.BatchNorm2d(64 // size_factor),
+            nn.Dropout2d(inplace=True),
+        )
+        #
+        self.dc5 = nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(
+                2 * 64 // size_factor,
+                out_channels=64 // size_factor,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.BatchNorm2d(64 // size_factor),
+        )
+        self.dc5_dsrab = N2DSRAB(
+            in_channels=64 // size_factor, expansion=4, num_stacks=4
+        )
+        #
+        self.dc4 = nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(
+                2 * 64 // size_factor,
+                out_channels=32 // size_factor,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+            ),
+            nn.BatchNorm2d(32 // size_factor),
+        )
+        self.dc4_dsrab = N2DSRAB(
+            in_channels=32 // size_factor, expansion=2, num_stacks=2
+        )
+        #
+        self.dc3 = nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(
+                2 * 32 // size_factor,
+                out_channels=32 // size_factor,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.BatchNorm2d(32 // size_factor),
+        )
+        self.dc3_dsrab = N2DSRAB(
+            in_channels=32 // size_factor, expansion=1, num_stacks=1
+        )
+        #
+        self.dc2 = nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(
+                2 * 32 // size_factor,
+                out_channels=32 // size_factor,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.BatchNorm2d(32 // size_factor),
+        )
+        self.dc1 = nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(
+                2 * 32 // size_factor,
+                out_channels=pred_len if predict_sequence else 1,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+            ),
+        )
 
-        x = self.conv_in(x)                             # => (B, hidden, H, W)
+    def forward(self, gt_radar, first_stage_pred):
+        assert gt_radar.size(2) == 1
+    
+        # reduce 5D to 4D
+        B, _, _, H, W = gt_radar.size()
+        gt_radar = gt_radar.view(B, self.input_len, H, W)
 
-        # Reorder for TrajGRU
-        x = x.unsqueeze(1)  # Insert time dimension T=1? 
-                            # Actually if we want to treat each frame as time steps, 
-                            # we need a different approach. 
-                            # Here's a simpler approach: treat the entire stack as 
-                            # "channels" at once. 
-                            # We'll do T=1 to keep the code simple:
-        x = x.permute(1, 0, 2, 3, 4).contiguous()       # (1, B, hidden, H, W)
-        out_seq, _ = self.traj_gru.forward(seq_len=1, inputs=x)
-        out = out_seq.permute(1, 0, 2, 3, 4)            # => (B, 1, hidden, H, W)
-        out = out.squeeze(1)                            # => (B, hidden, H, W)
+        B, _, _, H, W = first_stage_pred.size()
+        first_stage_pred = first_stage_pred.view(B, self.pred_len, H, W)
 
-        out = self.conv_out(out)                        # => (B, pred_len, H, W)
-        out = out.view(B, T_out, 1, H, W)
+        # Encoder
+        enc_in = torch.cat([gt_radar, first_stage_pred], dim=1)
+        enc1 = self.en_conv(enc_in)
+        enc2 = self.en2(enc1)
+        enc3 = self.en3(enc2)
+        enc4 = self.en4(enc3)
+        enc5 = self.en5(enc4)
+        enc6 = self.en6(enc5)
+        enc7 = self.en7(enc6)
+        enc8 = self.en8(enc7)
+        # attention
+        enc5 = self.en_att5(enc5)
+        enc6 = self.en_att6(enc6)
+        enc7 = self.en_att7(enc7)
+        enc8 = self.en_att8(enc8)
+
+        # Decoder
+        dec8 = self.dc8(enc8)
+        dec7 = self.dc7(torch.cat([enc7, dec8], dim=1))
+        dec6 = self.dc6(torch.cat([enc6, dec7], dim=1))
+        #
+        dec5 = self.dc5(torch.cat([enc5, dec6], dim=1))
+        # dec5 = self.dc5_dsrab(dec5) + dec5
+        #
+        dec4 = self.dc4(torch.cat([enc4, dec5], dim=1))
+        # dec4 = self.dc4_dsrab(dec4) + dec4
+        #
+        dec3 = self.dc3(torch.cat([enc3, dec4], dim=1))
+        # dec3 = self.dc3_dsrab(dec3) + dec3
+        #
+        dec2 = self.dc2(torch.cat([enc2, dec3], dim=1))
+        dec1 = self.dc1(torch.cat([enc1, dec2], dim=1))
+
+        # return dec1
+        if self.predict_sequence:
+            out = dec1 + first_stage_pred
+        else:
+            out = dec1 + first_stage_pred[:, -1:]
         return out
