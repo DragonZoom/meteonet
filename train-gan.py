@@ -41,14 +41,30 @@ parser.add_argument(
     "-b", "--batch-size", type=int, help="Batch size", dest="batch_size", default=128
 )
 parser.add_argument(
-    "-lr",
-    "--learning-rate",
-    type=str,
-    nargs="+",
+    "-lrg1",
+    "--learning-rate-g1",
+    type=float,
     help="LR_WD format is: epoch:Learning rate, weight decay",
-    dest="lr_wd",
-    default=["0:8e-4,1e-5", "4:1e-4,5e-5"],
+    dest="lr_g1",
+    default=0.00015,
 )
+parser.add_argument(
+    "-lrg2",
+    "--learning-rate-g2",
+    type=float,
+    help="LR_WD format is: epoch:Learning rate, weight decay",
+    dest="lr_g2",
+    default=8.9e-05,
+)
+parser.add_argument(
+    "-lrd",
+    "--learning-rate-d",
+    type=float,
+    help="LR_WD format is: epoch:Learning rate, weight decay",
+    dest="lr_d",
+    default=3.5e-05,
+)
+
 parser.add_argument(
     "-nw",
     "--num-workers",
@@ -71,13 +87,6 @@ parser.add_argument(
 parser.add_argument("-db", "--debug", type=bool, help="", dest="debug", default=False)
 # models: FsrGAN, FsrGAN_light, FsrGAN_no_wind
 parser.add_argument("-m", "--model", type=str, help="", dest="model", default="FsrGAN")
-
-# parser.add_argument('-f', '--load', dest='load', type=str, default=False, help='Load model from a .pth file')
-# parser.add_argument( '-gs', '--global-step-start', metavar='gstp', type=int, default=0,
-#                     help='Number of the last global step of loaded model', dest='glb_step_start')
-# parser.add_argument( '-es', '--epoch-start', metavar='es', type=int, default=0,
-#                     help='Number of last epoch of the loaded model', dest='epoch_start')
-
 args = parser.parse_args()
 
 ## user parameters
@@ -90,11 +99,9 @@ thresholds = [
     100 * k / 12 for k in args.thresholds
 ]  #  unit: CRF over 5 minutes in 1/100 of mm (as meteonet data)
 model_size = 8  # to do
-lr_wd = dict()
-for a in args.lr_wd:
-    k, u = a.split(":")
-    a, b = u.split(",")
-    lr_wd[int(k)] = float(a), float(b)
+lr_wd_g1 = {0: (args.lr_g1, 1e-4)}
+lr_wd_g2 = {0: (args.lr_g2, 1e-4)}
+lr_wd_d = {0: (args.lr_d, 1e-4)}
 
 if torch.backends.cuda.is_built() and torch.cuda.is_available():
     device = "cuda"
@@ -117,7 +124,9 @@ Data params:
 Train params:
    {args.epochs = } 
    {args.batch_size = }
-   {lr_wd = }
+   {lr_wd_g1 = }
+   {lr_wd_g2 = }
+   {lr_wd_d = }
    {clip_grad = }
 
 Others params:
@@ -136,7 +145,6 @@ from models.FsrGAN import (
     FirstStage,
     FsrSecondStageGenerator,
     FsrDiscriminator,
-    # FsrSecondStageGeneratorLight,
 )
 from trainers.gan import train_meteonet_gan
 from datetime import datetime
@@ -144,13 +152,12 @@ from datetime import datetime
 use_window = True
 if args.model == "FsrGAN_light":
     model1_g = FirstStage(input_len, time_horizon)
-    # model2_g = FsrSecondStageGeneratorLight(input_len, time_horizon)
     model2_g = FsrSecondStageGenerator(input_len, time_horizon, size_factor=4)
 
 elif args.model == "FsrGAN_no_wind":
     from models.FsrGAN_no_wind import RadarSecondStageGenerator, RadarFirstStage
 
-    model2_g = RadarSecondStageGenerator(input_len, time_horizon, size_factor=4)
+    model2_g = RadarSecondStageGenerator(input_len, time_horizon)
     model1_g = RadarFirstStage(input_len, time_horizon)
     use_window = False
 
@@ -172,21 +179,23 @@ from os.path import join
 
 train_ds = MeteonetDatasetChunked(
     args.data_dir,
-    "train" if not args.debug else "test",  # limit the number of files for testing
+    "train" if not args.debug else "train_small",  # limit the number of files for testing
     input_len,
     input_len + time_horizon,
     stride,
     target_is_one_map=False,
     use_wind=use_window,
+    normalize_target=False,
 )
 val_ds = MeteonetDatasetChunked(
     args.data_dir,
-    "val",
+    "val" if not args.debug else "val_small",
     input_len,
     input_len + time_horizon,
     stride,
     target_is_one_map=True,
     use_wind=use_window,
+    normalize_target=False,
 )
 
 val_ds.norm_factors = train_ds.norm_factors
@@ -239,9 +248,9 @@ scores = train_meteonet_gan(
     model_d,
     thresholds,
     args.epochs,
-    lr_wd,  # TODO: lr_wd_g1, lr_wd_g2, lr_wd_d
-    lr_wd,
-    lr_wd,
+    lr_wd_g1,
+    lr_wd_g2,
+    lr_wd_d,
     args.snapshot_step,
     rundir=rundir,
     device=device,
@@ -255,7 +264,9 @@ hyperparams = {
     "batch_size": args.batch_size,
     # 'clip_grad': clip_grad,
     "epochs": args.epochs,
-    "lr_wd": lr_wd,
+    "lr_wd_g1": lr_wd_g1,
+    "lr_wd_g2": lr_wd_g2,
+    "lr_wd_d": lr_wd_d,
     "oversampling": args.oversampling,
     # 'model_size': model_size,
     "data_dir": args.data_dir,
