@@ -63,7 +63,7 @@ parser.add_argument(
     type=float,
     help="Learning rate",
     dest="lr_d",
-    default=0.0001,
+    default=0.00005,
 )
 parser.add_argument(
     "-nw",
@@ -138,14 +138,25 @@ Others params:
 device = torch.device(device)
 
 # model
-from models.FsrGAN import FsrDiscriminator, FsrSecondStageGenerator
 
 if args.model == "FsrGAN":
+    from models.FsrGAN import FsrDiscriminator, FsrSecondStageGenerator
     model_G = FsrSecondStageGenerator(input_len, time_horizon, size_factor=1)
     model_D = FsrDiscriminator(time_horizon, size_factor=64)
+    use_wind = True
+    target_is_one_map = False
+elif args.model == "FsrGAN_radar_only":
+    from models.FsrGAN import FsrDiscriminator
+    from models.FsrGAN_no_wind import FsrSecondStageGeneratorRadarOnly
+    model_G = FsrSecondStageGeneratorRadarOnly(input_len, time_horizon, size_factor=2, predict_sequence=True)
+    T_D = time_horizon if model_G.predict_sequence else 1
+    model_D = FsrDiscriminator(T_D, size_factor=16)
+    target_is_one_map = not model_G.predict_sequence
+    use_wind = False
 else:
     raise ValueError(f"Unknown model {args.model}")
 
+print(f"{target_is_one_map=}")
 # print number of parameters for each model
 print(f"Number of parameters for model_G: {sum(p.numel() for p in model_G.parameters())}")
 print(f"Number of parameters for model_D: {sum(p.numel() for p in model_D.parameters())}")
@@ -164,9 +175,10 @@ train_ds = MeteonetDatasetChunked(
     input_len,
     input_len + time_horizon,
     stride,
-    target_is_one_map=False,
-    use_wind=True,
+    target_is_one_map=target_is_one_map,
+    use_wind=use_wind,
     normalize_target=True,
+    skip_withou_wind=True, # TODO: s1 was trained with wind
 )
 train_ds_wrapp = DatsetWrapperFsrSecondStage(
     os.path.join(args.s1_data_dir, "train" if not args.debug else "val"),
@@ -179,9 +191,10 @@ val_ds = MeteonetDatasetChunked(
     input_len,
     input_len + time_horizon,
     stride,
-    target_is_one_map=False,
-    use_wind=True,
+    target_is_one_map=target_is_one_map,
+    use_wind=use_wind,
     normalize_target=False,
+    skip_withou_wind=True, # TODO: s1 was trained with wind
 )
 val_ds.norm_factors = train_ds.norm_factors
 val_ds_wrapp = DatsetWrapperFsrSecondStage(
@@ -239,6 +252,7 @@ scores = train_meteonet_gan_stage2(
     args.snapshot_step,
     rundir=rundir,
     device=device,
+    target_is_one_map=target_is_one_map,
 )
 
 hyperparams = {

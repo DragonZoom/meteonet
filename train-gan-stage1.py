@@ -129,17 +129,19 @@ from datetime import datetime
 
 use_window = True
 
-if args.model == "FsrGAN_no_wind":
-    from models.FsrGAN_no_wind import RadarFirstStage
-    model1_g = RadarFirstStage(input_len, time_horizon)
+if args.model == "FsrGAN_radar_only":
+    from models.FsrGAN_no_wind import FirstStageRadarOnly
+    model1_g = FirstStageRadarOnly(input_len, time_horizon)
     use_window = False
 
 elif args.model == "FsrGAN":
-    model1_g = FirstStage(input_len, time_horizon, 4)
+    model1_g = FirstStage(input_len, time_horizon, 1)
 else:
     raise ValueError(f"Unknown model {args.model}")
 
 print(f'Use window: {use_window}')
+# print num of parameters
+print(f"Number of parameters: {sum(p.numel() for p in model1_g.parameters())}")
 
 # data
 from meteonet.loader import MeteonetDatasetChunked
