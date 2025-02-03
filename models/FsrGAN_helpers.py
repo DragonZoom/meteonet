@@ -4,6 +4,12 @@ import torch.nn.functional as F
 
 from .trajGRU import TrajGRU
 
+
+def separate_radar_wind(x):
+    radars    = x[:,:, 0:1].contiguous()
+    wind_maps = x[:,:, 1:].contiguous()
+    return radars, wind_maps
+
 ###############################################################################
 #                        Basic Building Blocks
 ###############################################################################
@@ -253,7 +259,91 @@ class SCA(nn.Module):
         # Paper’s figure shows them summed into final H
         H = EH_spatial_att + ER_channel_att  # element‐wise sum
         return H
-    
+
+class SSA(nn.Module):
+    """
+    Spatial-Spatial Attention (SSA) block as shown in Fig.5 of the paper.
+
+    Inputs:
+      E_W, E_R: tensors of shape (B, C, H, W)
+                 Must be the same shape.
+
+    Output:
+      H:        tensor of shape (B, C, H, W), computed by merging the
+                spatial attention output (on E_H) and spatial attention
+                output (on E_R).
+    """
+
+    def __init__(self, channels):
+        """
+        Args:
+          channels (int): number of feature channels in both E_H and E_R
+        """
+        super(SSA, self).__init__()
+
+        # ----------------------------
+        # 1) SPATIAL ATTENTION BRANCH for E_H
+        #    Takes E_H => computes mean & max (per-channel) => concat => conv => sigmoid
+        # ----------------------------
+        self.conv_spatial_EH = nn.Sequential(
+            nn.Conv2d(
+                in_channels=2, out_channels=1, kernel_size=7, padding=3, bias=False
+            ),
+            nn.BatchNorm2d(1),
+            nn.Sigmoid(),
+        )
+
+        # ----------------------------
+        # 2) SPATIAL ATTENTION BRANCH for E_R
+        #    Takes E_R => computes mean & max (per-channel) => concat => conv => sigmoid
+        # ----------------------------
+        self.conv_spatial_ER = nn.Sequential(
+            nn.Conv2d(
+                in_channels=2, out_channels=1, kernel_size=7, padding=3, bias=False
+            ),
+            nn.BatchNorm2d(1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, E_H, E_R):
+        """
+        E_H: (B, C, H, W) -> spatial attention path
+        E_R: (B, C, H, W) -> spatial attention path
+        returns:
+          H:  (B, C, H, W)
+        """
+        # ------------- Spatial Attention on E_H ------------- #
+        # Compute mean and max along channel dim => (B, 1, H, W) each
+        EH_mean = torch.mean(E_H, dim=1, keepdim=True)
+        EH_max, _ = torch.max(E_H, dim=1, keepdim=True)
+
+        # Concat => (B, 2, H, W)
+        EH_cat = torch.cat((EH_mean, EH_max), dim=1)
+
+        # Pass through conv -> BN -> Sigmoid => Spatial mask
+        spatial_mask_EH = self.conv_spatial_EH(EH_cat)  # (B, 1, H, W)
+
+        # Multiply with E_H (element‐wise)
+        EH_spatial_att = E_H * spatial_mask_EH  # (B, C, H, W)
+
+        # ------------- Spatial Attention on E_R ------------- #
+        # Compute mean and max along channel dim => (B, 1, H, W) each
+        ER_mean = torch.mean(E_R, dim=1, keepdim=True)
+        ER_max, _ = torch.max(E_R, dim=1, keepdim=True)
+
+        # Concat => (B, 2, H, W)
+        ER_cat = torch.cat((ER_mean, ER_max), dim=1)
+
+        # Pass through conv -> BN -> Sigmoid => Spatial mask
+        spatial_mask_ER = self.conv_spatial_ER(ER_cat)  # (B, 1, H, W)
+
+        # Multiply with E_R (element‐wise)
+        ER_spatial_att = E_R * spatial_mask_ER  # (B, C, H, W)
+
+        # ------------- Merge the two results ------------- #
+        # Paper’s figure shows them summed into final H
+        H = EH_spatial_att + ER_spatial_att  # element‐wise sum
+        return H
 
 
 ###############################################################################
