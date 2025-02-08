@@ -16,7 +16,7 @@ parser.add_argument(
     type=str,
     help="Directory containing data",
     dest="data_dir",
-    default="data",
+    default="data-chunked",
 )
 parser.add_argument(
     "-s1dd",
@@ -41,7 +41,7 @@ parser.add_argument(
     type=str,
     help="Directory to save logs and checkpoints",
     dest="run_dir",
-    default="runs/s2",
+    default="runs/stage2",
 )
 parser.add_argument(
     "-e", "--epochs", type=int, help="Number of epochs", dest="epochs", default=20

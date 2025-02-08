@@ -14,9 +14,9 @@ parser.add_argument(
     "-dd",
     "--data-dir",
     type=str,
-    help="Directory containing data",
+    help="Directory containing data (should be chunked!)",
     dest="data_dir",
-    default="data",
+    default="data-chunked",
 )
 parser.add_argument(
     "-t",
@@ -33,13 +33,13 @@ parser.add_argument(
     type=str,
     help="Directory to save logs and checkpoints",
     dest="run_dir",
-    default="runs",
+    default="runs/stage1",
 )
 parser.add_argument(
     "-e", "--epochs", type=int, help="Number of epochs", dest="epochs", default=20
 )
 parser.add_argument(
-    "-b", "--batch-size", type=int, help="Batch size", dest="batch_size", default=128
+    "-b", "--batch-size", type=int, help="Batch size", dest="batch_size", default=16
 )
 parser.add_argument(
     "-lrg1",

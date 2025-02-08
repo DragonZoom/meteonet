@@ -22,13 +22,13 @@ def evaluate_model(model, loader, dst_dir, device):
             np.save(filename, y_hat[i])
 
 def main(args): 
-    input_len = 12
-    time_horizon = 6
-    stride = 12
-    batch_size = 32
+    input_len = args.input_len
+    time_horizon = args.time_horizon
+    stride = args.stride
+    batch_size = args.batch_size
 
     test_ds = MeteonetDatasetChunked(
-        "./data-chunked/",
+        args.data_dir,
         "test",
         input_len,
         input_len + time_horizon,
@@ -38,7 +38,7 @@ def main(args):
         normalize_target=False
     )
     val_ds = MeteonetDatasetChunked(
-        "./data-chunked/",
+        args.data_dir,
         "val",
         input_len,
         input_len + time_horizon,
@@ -48,7 +48,7 @@ def main(args):
         normalize_target=False
     )
     train_ds = MeteonetDatasetChunked(
-        "./data-chunked/",
+        args.data_dir,
         "train",
         input_len,
         input_len + time_horizon,
@@ -92,7 +92,12 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='First Stage Inference Script')
-    parser.add_argument('--model_pt', type=str, default='best_runs/stage_1_size_2/model_s1_last_epoch.pt', help='Path to the model checkpoint')
-    parser.add_argument('--dest_dir', type=str, default='cache/first_stage_predictions', help='Path to the directory where the predictions will be saved')
+    parser.add_argument('--model-pt', type=str, default='best_runs/stage_1_size_2/model_s1_last_epoch.pt', help='Path to the model checkpoint')
+    parser.add_argument('--dest-dir', type=str, default='cache/first_stage_predictions', help='Path to the directory where the predictions will be saved')
+    parser.add_argument('--data-dir', type=str, default='./data-chunked', help='Path to the data directory')
+    parser.add_argument('--input-len', type=int, default=12, help='Length of the input sequence')
+    parser.add_argument('--time-horizon', type=int, default=6, help='Time horizon for prediction')
+    parser.add_argument('--stride', type=int, default=12, help='Stride for the dataset')
+    parser.add_argument('--batch-size', type=int, default=32, help='Batch size for the DataLoader')
     args = parser.parse_args()
     main(args)
