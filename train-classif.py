@@ -17,6 +17,8 @@ parser.add_argument( '-lr', '--learning-rate', type=str, nargs='+', help='LR_WD 
 parser.add_argument( '-nw', '--num-workers', type=int,  help='Numbers of workers for Cuda', dest='num_workers', default = 8 if processor() != 'arm' else 0 ) # no multithreadings on M1/M2 :(
 parser.add_argument( '-o', '--oversampling', type=float, help='Oversampling percentage of last class', dest='oversampling', default=0.9)
 parser.add_argument( '-ss', '--snapshot-step', type=int, help='', dest='snapshot_step', default=5)
+parser.add_argument( '-db', '--debug', type=bool, help='', dest='debug', default=False)
+
 
 #parser.add_argument('-f', '--load', dest='load', type=str, default=False, help='Load model from a .pth file')
 #parser.add_argument( '-gs', '--global-step-start', metavar='gstp', type=int, default=0,
@@ -69,6 +71,7 @@ Others params:
    {args.snapshot_step = }
    {args.num_workers = }
    {args.run_dir = }
+   {args.debug = }
 """)
 
 device = torch.device(device)
@@ -81,7 +84,19 @@ from tqdm import tqdm
 from os.path import join
 
 # split in validation/test sets according to Section 4.1 from [1]
-train_files, val_files, _ = bouget21(join(args.data_dir, 'rainmaps'))
+cache_file = join(args.data_dir, "file_cache.pt")
+if os.path.exists(cache_file):
+    print(f"Loading cached file list from {cache_file}")
+    cache = torch.load(cache_file)
+    train_files, val_files = cache["train_files"], cache["val_files"]
+else:
+    train_files, val_files, _ = bouget21(join(args.data_dir, "rainmaps"))
+    print(f"Caching file list to {cache_file}")
+    torch.save({"train_files": train_files, "val_files": val_files}, cache_file)
+# limit the number of files for testing
+if args.debug:
+    train_files = train_files[:2560]
+    val_files = val_files[:1280]
 
 # datasets
 indexes = [join(args.data_dir,'train.npz'), join(args.data_dir,'val.npz')]
@@ -118,7 +133,7 @@ else:
     
 #try:
 
-rundir = join(args.run_dir,f'{datetime.now()}')
+rundir = join(args.run_dir,f'{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}')
 print(f'run files will be recorded in directory {rundir}')
 os.system(f'mkdir -p "{rundir}"')
 scores = train_meteonet_classif( train_loader, val_loader, model, thresholds, args.epochs, lr_wd, args.snapshot_step, rundir=rundir, device = device)
