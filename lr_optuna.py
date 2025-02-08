@@ -29,7 +29,7 @@ def parse_args():
         description="Hyperparameter optimization for FsrGAN using Optuna",
     )
     parser.add_argument(
-        "-dd", "--data-dir", type=str, default="data",
+        "-dd", "--data-dir", type=str, default="data-chunked",
         help="Directory containing data"
     )
     parser.add_argument(
@@ -94,11 +94,11 @@ def objective(trial: Trial, args, train_loader, val_loader, thresholds, device):
         use_window = True
     elif args.model == "FsrGAN_light":
         from models.FsrGAN import FirstStage
-        from models.FsrGANLight import FsrSecondStageGeneratorLight
+        # from models.FsrGANLight import FsrSecondStageGeneratorLight
         #
-        model1_g = FirstStage(input_len, time_horizon)
+        model1_g = FirstStage(input_len, time_horizon, size_factor=1)
         # model2_g = FsrSecondStageGeneratorLight(input_len, time_horizon)
-        model2_g = FsrSecondStageGenerator(input_len, time_horizon, size_factor=4)
+        model2_g = FsrSecondStageGenerator(input_len, time_horizon, size_factor=8)
         use_window = True
     elif args.model == "FsrGAN_no_wind":
         from models.FsrGAN_no_wind import RadarSecondStageGenerator, RadarFirstStage
@@ -179,12 +179,13 @@ def main():
     print("Loading datasets... (this may take some time)")
     train_ds = MeteonetDatasetChunked(
         args.data_dir,
-        "train_small",
+        "val_small",
         input_len,
         input_len + time_horizon,
         input_len,
         target_is_one_map=False,
         use_wind=(args.model != "FsrGAN_no_wind"),
+        normalize_target=False,
     )
     val_ds = MeteonetDatasetChunked(
         args.data_dir,
@@ -194,6 +195,7 @@ def main():
         input_len,
         target_is_one_map=True,
         use_wind=(args.model != "FsrGAN_no_wind"),
+        normalize_target=False,
     )
     val_ds.norm_factors = train_ds.norm_factors
 
@@ -240,6 +242,13 @@ def main():
     with open(best_params_path, "w") as f:
         f.write(str(study.best_params))
     print(f"Saved best params to: {best_params_path}")
+
+    # Save the study for visualization
+    import pickle
+    study_path = os.path.join(args.run_dir, "optuna_study.pkl")
+    with open(study_path, "wb") as f:
+        pickle.dump(study, f)
+    print(f"Saved Optuna study to: {study_path}")
 
 
 if __name__ == "__main__":
